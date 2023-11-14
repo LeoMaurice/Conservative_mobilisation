@@ -1,8 +1,10 @@
+# Corpus  francophone
 www.observatoirepetitessirene.org,
-https://ypomoni.org,
+https://ypomoni.org : https://lesruminants.com/2021/07/23/protegeons-nos-filles/ ,
 https://cryforrecognition.be,
 https://www.lelaboratoiredelarepublique.fr/publications/,
-https://christineld75.wordpress.com/,
+https://christineld75.wordpress.com/ : https://lesruminants.com/2021/11/18/fractures-de-christine-le-doare/,
 https://www.cathobel.be/2023/09/des-voix-selevent-contre-levras-obligatoire/,
 https://www.lesyndicatdelafamille.fr/,
 http://www.vigi-gender.fr/,
+https://tradfem.wordpress.com,
