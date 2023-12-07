@@ -245,11 +245,20 @@ labelTopics(stm_lda)
 
 ```
 ```{r}
-plot(stm_lda, type = "summary")
+plot(stm_lda, type = "summary", labeltype = "prob")
 
 ```
 ```{r}
-plot(stm_lda, type = "summary", labeltype = "frex", frexw=0.85)
+plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+```
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(4,3))
+
+```
+
+```{r}
+corrmat <- topicCorr(stm_lda)
+plot(corrmat)
 ```
 
 
