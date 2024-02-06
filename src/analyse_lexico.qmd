@@ -43,16 +43,16 @@ set.seed(seed)
 ```{r}
 # modifié ID, mettre les ID mis en place par Fynch
 
-femelliste_articles <- read_delim("../data/text/femelliste_articles.tsv", 
+base_articles <- read_delim("../data/base_def.tsv", 
     delim = "\t", escape_double = FALSE, 
     trim_ws = TRUE)|>
-  rename(Texte = "Texte Complet",
-         URL = "URL Complète")|>
-  mutate(Origine = "Femelliste",
-         ID = row_number())
+  rename(Texte = "contenu",
+         ID = "ID ARTICLE",
+         ASSO = "ID ASSO",
+         type_doc = "Type de document")
 
 
-femelliste_articles$Texte = femelliste_articles$Texte|>
+base_articles$Texte = base_articles$Texte|>
   str_replace_all("\\s+", " ") |>
   str_replace_all("[']", " ") |>
   str_replace_all("[’]", " ") |>
@@ -61,10 +61,23 @@ femelliste_articles$Texte = femelliste_articles$Texte|>
   str_replace_all("\n", " ") |>
   str_replace_all("[,]",".")
 
-cp <- corpus(femelliste_articles$Texte, 
-             docvars = femelliste_articles |> select(ID,
-                                    Origine, Date) |> as.data.frame(), 
-             docnames = femelliste_articles$ID)
+keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuelles",
+              "transgenre", "transgenres", "transidentité", "transsexualité", "transsexualités",
+              "transgender", "non-binaire", "non-binaires", "genderqueer", "intersexe", "intersexes",
+              "queer", "affirmant le genre", "affirmant les genres", "transition de genre",
+              "transitions de genre", "identité de genre", "identités de genre")
+
+# Construction d'une expression régulière à partir des mots-clés pour la recherche
+regex_keywords <- paste(keywords, collapse = "|")
+
+# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'Texte'
+filtered_data <- base_articles %>%
+  filter(grepl(regex_keywords, Texte, ignore.case = TRUE))
+
+cp <- corpus(filtered_data$Texte, 
+             docvars = filtered_data |> select(ID,
+                                    ASSO, Date, type_doc) |> as.data.frame(), 
+             docnames = filtered_data$ID)
 # tokenisation
 tk_original <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
 ```
@@ -137,7 +150,16 @@ toremove <- c(stopwords("fr"), stopwords("en"),
               "co-fondatrice",
               "beaucoup",
               "parmarguerite",
-              "années")
+              "années",
+              "→",
+              "selon",
+              "this:twitterfacebookj",
+              "aimechargement",
+              "←",
+              "commentaireannuler",
+              "réponse.δce",
+              "akismet",
+              "indésirables.en")
 
 tk <- tokens_remove(tk_original,toremove)
 
@@ -151,7 +173,20 @@ dfm <- dfm(tk) |>
 print(textstat_frequency(dfm, n=100))|> select(feature) |> kable()
 ```
 
-# Stat desc
+# Stat desc 
+
+## Frequency
+
+```{r}
+dfm %>% 
+  textstat_frequency(n = 15) %>% 
+  ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
+  geom_point() +
+  coord_flip() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal()
+```
+
 
 ```{r}
 #| eval: true
@@ -159,7 +194,7 @@ print(textstat_frequency(dfm, n=100))|> select(feature) |> kable()
 #| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
-textplot_wordcloud(dfm, min_count = 20, random_order = FALSE, rotation = 0.25,
+textplot_wordcloud(dfm, min_count = 100, random_order = FALSE, rotation = 0.25,
                    color = palette)
 ```
 # Choix nombre de topics
@@ -172,7 +207,7 @@ stm_data <- convert(dfm, to = "stm")
 
 
 if(recompute_choix_K){
-  list_nb_topics_K <- seq(5, 20)
+  list_nb_topics_K <- seq(5, 20, 2)
 
   tp_nb <- FindTopicsNumber(tm_data, topics = list_nb_topics_K, 
                           metrics = c("Griffiths2004", "CaoJuan2009", 
@@ -182,9 +217,9 @@ if(recompute_choix_K){
   diag <- searchK(stm_data$documents, stm_data$vocab, 
                   list_nb_topics_K, 
                   verbose=FALSE)
-  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20231205_metrics.RData")
+  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240206_metrics.RData")
 } else{
-  load("../data/results/LDA_report_20231205_metrics.RData")
+  load("../data/results/LDA_report_20240206_metrics.RData")
 }
 
 ```
@@ -229,7 +264,7 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_lda <- stm(dfm,
                K=num_topic, 
-               #prevalence =~ ,
+               prevalence =~factor(ASSO) + factor(type_doc) ,
                #content =~ ,
                init.type = "Spectral",
                seed = seed, 
@@ -249,7 +284,7 @@ plot(stm_lda, type = "summary", labeltype = "prob")
 
 ```
 ```{r}
-plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
 ```
 ```{r}
 plot(stm_lda, type = "perspectives", topics = c(4,3))
@@ -260,5 +295,85 @@ plot(stm_lda, type = "perspectives", topics = c(4,3))
 corrmat <- topicCorr(stm_lda)
 plot(corrmat)
 ```
+## Effet des métadonnées
 
+```{r}
+#| eval: true
+stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ saisine + divergence + factor(president) + factor(theme), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
+```
+
+```{r}
+#| eval: true
+#| output: true
+#| label: tbl-stm-main_effects
+#| tbl-cap: "Effets significatifs des métadonnées sur les différents topics"
+# tbl-cap-location: top
+#| tbl-colwidths: [100]
+data.frame()|>kable()
+```
+
+```{r}
+#| eval: true
+#| output: true
+#| results: asis
+summary(stm_lda.effect) -> summary_stm_main_effects
+signif_code_footnotes = "Signif. codes, p<t : 0.001 ‘\u00B7\u00B7\u00B7\u00B7’ 0.01 ‘\u00B7\u00B7\u00B7’ 0.05 ‘\u00B7\u00B7’ 0.1 ‘\u00B7’ "
+
+signif_codes <- function(p){
+  if(p<=0.001)
+    return("\u2022\u2022\u2022\u2022")
+  else if(p < 0.01)
+    return("\u2022\u2022\u2022")
+  else if(p <0.5)
+    return("\u2022\u2022")
+  else if(p<0.1)
+    return("\u2022")
+  else
+    return("")
+}
+
+# data.frame()|>
+#   kable(caption = "**Effets significatifs des métadonnées sur les différents topics**",
+#         label = "tbl-stm-main_effects")
+
+
+for(i in 1:num_topic){
+  # if (i==1)
+  #   topic_label = "tbl-stm-main_effects"
+  # else
+  topic_label = paste("tbl-stm-main_effects",i,collapse = "-")
+  topic_caption <- paste("Effets structurels significatifs sur la prévalence des thèmes pour le topic",
+                         topic_names[paste0("Topic",i)], collaspe = "\n")
+  cat(summary_stm_main_effects$tables[[i]] |>
+    as.data.frame()|>
+    mutate(signif = sapply(`Pr(>|t|)`,signif_codes))|>
+    filter(`Pr(>|t|)`<=0.1)|>
+      kable(caption = topic_caption, digits = 3,
+            label = topic_label)|>
+      footnote(signif_code_footnotes))
+  cat("\n\n")
+}
+
+```
+
+```{r}
+# plot(stm_lda.effect, type = "perspectives", topics = c(10), covariate = "saisine", xlab = "Saisine", model = stm_lda.effect, method = "pointestimate")
+```
+
+```{r}
+#| eval: true
+#| output: true
+#| fig-cap: Prevalence des topics au cours du temps dans les documents (présentant une prévalence d'au moins 0.1)
+#| label: fig-stm-time
+
+make.dt(stm_lda,meta = stm_data$meta)|> select(num,Date, starts_with("Topic")) |>
+  pivot_longer(starts_with("Topic")) |>
+  filter(value >0.1)|>
+  mutate(name = topic_names[name])|> 
+  ggpubr::ggscatter(x="Date", y = "value", 
+                    facet.by = "name",
+                    xlab = "Temps",ylab = "Prevalence", title = "Prevalence of each topics by documents overtime")+
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE, color = "#C000C0")+
+  theme_prism()
+```
 
