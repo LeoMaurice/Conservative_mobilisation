@@ -40,8 +40,12 @@ seed = 24021956 # date de naissance de Butler
 set.seed(seed)
 ```
 
+# Ouverture données
+
 ```{r}
 # modifié ID, mettre les ID mis en place par Fynch
+Base_de_données_site_anti_trans <- read_excel("../Base de données site anti-trans.xlsx")|>
+  rename(ASSO = Id)
 
 base_articles <- read_delim("../data/base_def.tsv", 
     delim = "\t", escape_double = FALSE, 
@@ -49,7 +53,9 @@ base_articles <- read_delim("../data/base_def.tsv",
   rename(Texte = "contenu",
          ID = "ID ARTICLE",
          ASSO = "ID ASSO",
-         type_doc = "Type de document")
+         type_doc = "Type de document")|>
+  left_join(Base_de_données_site_anti_trans, by = "ASSO")|>
+  rename(type_asso = "Idéologie")
 
 
 base_articles$Texte = base_articles$Texte|>
@@ -76,7 +82,7 @@ filtered_data <- base_articles %>%
 
 cp <- corpus(filtered_data$Texte, 
              docvars = filtered_data |> select(ID,
-                                    ASSO, Date, type_doc) |> as.data.frame(), 
+                                    ASSO, Date, type_doc, type_asso) |> as.data.frame(), 
              docnames = filtered_data$ID)
 # tokenisation
 tk_original <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
@@ -197,6 +203,81 @@ palette <-ggprism::prism_color_pal("winter_bright")(9)
 textplot_wordcloud(dfm, min_count = 100, random_order = FALSE, rotation = 0.25,
                    color = palette)
 ```
+
+## Fréquence certains mots
+```{r}
+# Liste des mots clés
+keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
+
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")
+
+# Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+df_keywords$type_doc <- filtered_data$type_doc
+
+# Calculer la somme des fréquences pour chaque mot clé par type_doc
+df_freq <- df_keywords %>% 
+  group_by(type_doc) %>%
+  summarise(across(keywords, sum, na.rm = TRUE)) %>%
+  pivot_longer(-type_doc, names_to = "keyword", values_to = "frequency")
+
+# Créer le graphique avec ggplot2
+ggplot(df_freq, aes(x = keyword, y = frequency, fill = type_doc)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Fréquence des mots clés par type de document",
+       x = "Mot clé", y = "Fréquence") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+library(quanteda)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Suppose 'dfm_corpus' is your Document-Feature Matrix and 'data' is your dataframe including the 'type_asso' variable
+data = filtered_data
+dfm_corpus = dfm
+# List of keywords
+keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+
+# Filter the DFM to keep only the keywords
+dfm_keywords <- dfm_select(dfm_corpus, pattern = keywords, selection = "keep")
+
+# Add the 'type_asso' covariate from your 'data' dataframe
+# Make sure the order of documents in 'data' corresponds to that in 'dfm_corpus'
+dfm_keywords$type_asso <- data$type_asso
+
+# Convert the filtered DFM to a dataframe for analysis
+df_keywords <- convert(dfm_keywords, to = "data.frame")
+df_keywords$type_asso <- data$type_asso  # Make sure to add 'type_asso' correctly
+
+# Calculate the relative frequency of keywords by type_asso
+df_freq_rel <- df_keywords %>% 
+  group_by(type_asso) %>%
+  summarise(across(keywords, sum, na.rm = TRUE)) %>%
+  mutate(total_docs = n()) %>%
+  pivot_longer(-c(type_asso, total_docs), names_to = "keyword", values_to = "frequency") %>%
+  mutate(frequency_per_doc = frequency / total_docs)
+
+# Create the graph with ggplot2
+ggplot(df_freq_rel, aes(x = keyword, y = frequency_per_doc, fill = type_asso)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Relative Frequency of Keywords by Association Type",
+       x = "Keyword", y = "Frequency per Document") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
 # Choix nombre de topics
 
 ```{r}
@@ -254,7 +335,7 @@ map(diag$results, unlist) |>
 
 # STM
 ```{r}
-num_topic = 7
+num_topic = 11
 ```
 
 ```{r}
@@ -264,7 +345,7 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_lda <- stm(dfm,
                K=num_topic, 
-               prevalence =~factor(ASSO) + factor(type_doc) ,
+               prevalence =~factor(type_doc) + factor(type_asso) ,
                #content =~ ,
                init.type = "Spectral",
                seed = seed, 
@@ -284,7 +365,7 @@ plot(stm_lda, type = "summary", labeltype = "prob")
 
 ```
 ```{r}
-plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
+plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
 ```
 ```{r}
 plot(stm_lda, type = "perspectives", topics = c(4,3))
@@ -299,81 +380,41 @@ plot(corrmat)
 
 ```{r}
 #| eval: true
-stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ saisine + divergence + factor(president) + factor(theme), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
+stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ factor(ASSO) + factor(type_doc), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
+```
+```{r}
+summary_stm_main_effects
 ```
 
 ```{r}
-#| eval: true
-#| output: true
-#| label: tbl-stm-main_effects
-#| tbl-cap: "Effets significatifs des métadonnées sur les différents topics"
-# tbl-cap-location: top
-#| tbl-colwidths: [100]
-data.frame()|>kable()
-```
+# Supposons que 'effets' est l'objet retourné par estimateEffect
+effets <- estimateEffect(formula = 1:num_topic ~ factor(type_asso) + factor(type_doc), 
+                         stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
 
-```{r}
-#| eval: true
-#| output: true
-#| results: asis
-summary(stm_lda.effect) -> summary_stm_main_effects
-signif_code_footnotes = "Signif. codes, p<t : 0.001 ‘\u00B7\u00B7\u00B7\u00B7’ 0.01 ‘\u00B7\u00B7\u00B7’ 0.05 ‘\u00B7\u00B7’ 0.1 ‘\u00B7’ "
+# Extraction des résumés des effets pour chaque sujet
+summaries <- summary(effets, topics = 1:num_topic)
 
-signif_codes <- function(p){
-  if(p<=0.001)
-    return("\u2022\u2022\u2022\u2022")
-  else if(p < 0.01)
-    return("\u2022\u2022\u2022")
-  else if(p <0.5)
-    return("\u2022\u2022")
-  else if(p<0.1)
-    return("\u2022")
-  else
-    return("")
+# Pour chaque sujet, filtrer et afficher uniquement les coefficients significatifs
+
+cat("\n\n\n\n")
+for (i in 1:num_topic) {
+  cat("Topic", i, ":\n\n")
+  
+  # Extrait les coefficients et p-valeurs pour le sujet courant
+  coeffs <- summaries$tables[[i]]
+  
+  # Filtrer pour garder uniquement les coefficients significatifs
+  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.05, ]
+  
+  # Si aucun coefficient significatif, afficher un message
+  if (length(significant_coeffs) == 0) {
+    cat("No significant coefficients for this topic.\n\n")
+  } else {
+    print(significant_coeffs)
+  }
+  
+  cat("\n---\n")
 }
 
-# data.frame()|>
-#   kable(caption = "**Effets significatifs des métadonnées sur les différents topics**",
-#         label = "tbl-stm-main_effects")
-
-
-for(i in 1:num_topic){
-  # if (i==1)
-  #   topic_label = "tbl-stm-main_effects"
-  # else
-  topic_label = paste("tbl-stm-main_effects",i,collapse = "-")
-  topic_caption <- paste("Effets structurels significatifs sur la prévalence des thèmes pour le topic",
-                         topic_names[paste0("Topic",i)], collaspe = "\n")
-  cat(summary_stm_main_effects$tables[[i]] |>
-    as.data.frame()|>
-    mutate(signif = sapply(`Pr(>|t|)`,signif_codes))|>
-    filter(`Pr(>|t|)`<=0.1)|>
-      kable(caption = topic_caption, digits = 3,
-            label = topic_label)|>
-      footnote(signif_code_footnotes))
-  cat("\n\n")
-}
-
-```
-
-```{r}
-# plot(stm_lda.effect, type = "perspectives", topics = c(10), covariate = "saisine", xlab = "Saisine", model = stm_lda.effect, method = "pointestimate")
-```
-
-```{r}
-#| eval: true
-#| output: true
-#| fig-cap: Prevalence des topics au cours du temps dans les documents (présentant une prévalence d'au moins 0.1)
-#| label: fig-stm-time
-
-make.dt(stm_lda,meta = stm_data$meta)|> select(num,Date, starts_with("Topic")) |>
-  pivot_longer(starts_with("Topic")) |>
-  filter(value >0.1)|>
-  mutate(name = topic_names[name])|> 
-  ggpubr::ggscatter(x="Date", y = "value", 
-                    facet.by = "name",
-                    xlab = "Temps",ylab = "Prevalence", title = "Prevalence of each topics by documents overtime")+
-  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE, color = "#C000C0")+
-  theme_prism()
 ```
 
