@@ -36,7 +36,7 @@ couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
-save_figure = FALSE
+save_figure = TRUE
 
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
@@ -208,8 +208,11 @@ dfm |>
 #| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
-textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
+wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
                    color = palette)
+if(save_figure){
+  ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf")
+}
 ```
 
 ## Fréquence certains mots par idéologie
@@ -347,7 +350,9 @@ custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = m
   theme_prism() + # Use ggpubr theme
   labs(x = "number of topics", y = NULL, color = "metrics:",shape = "metrics:") +
   theme(legend.position = "right",
-        legend.title = element_text())
+        legend.title = element_text(),
+        panel.grid.major.x = element_line(linewidth = 0.2,color = "grey"),
+        panel.grid.minor.x = element_line(linewidth = 0.1,color = "grey"))
 if(save_figure){
   ggsave("../output/lda/find_topic_number_metrics.pdf",plot = custom_tp_nb_plot)
 }
@@ -363,6 +368,7 @@ custom_tp_nb_plot
 map(diag$results, unlist) |> 
   bind_cols() |> 
   ggplot(aes(exclus, semcoh, label = K)) +
+  labs(y = "cohérence sémantique",x = "exclusivité")+
     geom_point() +
     geom_label() +
   theme_prism()
@@ -380,7 +386,7 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_lda <- stm(dfm,
                K=num_topic, 
-               prevalence =~factor(type_doc) + factor(type_asso) ,
+               prevalence =~factor(Idéologie) ,
                #content =~ ,
                init.type = "Spectral",
                seed = seed, 
@@ -414,16 +420,8 @@ plot(corrmat)
 ## Effet des métadonnées
 
 ```{r}
-#| eval: true
-stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ factor(ASSO) + factor(type_doc), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
-```
-```{r}
-summary_stm_main_effects
-```
-
-```{r}
 # Supposons que 'effets' est l'objet retourné par estimateEffect
-effets <- estimateEffect(formula = 1:num_topic ~ factor(type_asso) + factor(type_doc), 
+effets <- estimateEffect(formula = 1:num_topic ~ factor(Idéologie), 
                          stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
 
 # Extraction des résumés des effets pour chaque sujet
