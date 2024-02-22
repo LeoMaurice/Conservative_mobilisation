@@ -1,0 +1,420 @@
+---
+title: "analyse_lexico"
+format: html
+editor: source
+---
+
+```{r}
+if (!require("pacman")) install.packages("pacman"); library(pacman)
+pacman::p_load(tidyverse,
+               lubridate,
+               here,
+               knitr,
+               quanteda,
+               quanteda.textstats,
+               stm,
+               topicmodels,
+               LDAvis,
+               ldatuning,
+               readr,
+               quanteda.textplots,
+               ggprism,
+               ggpmisc,
+               RJSONIO,
+               ggrepel,
+               ggcorrplot,
+               pdftools,
+               #pdftk, pas dispo
+               #tabulizer,
+               tesseract,
+               stringr,
+               openxlsx,
+               readr,
+               readxl
+            )
+
+# Some little helps from the internet
+source("../src/helpers/lda_reports.R")
+
+seed = 24021956 # date de naissance de Butler
+set.seed(seed)
+```
+
+# Ouverture données
+
+```{r}
+# modifié ID, mettre les ID mis en place par Fynch
+Base_de_données_site_anti_trans <- read_excel("../Base de données site anti-trans.xlsx")|>
+  rename(ASSO = Id)
+
+base_articles <- read_delim("../data/base_def.tsv", 
+    delim = "\t", escape_double = FALSE, 
+    trim_ws = TRUE)|>
+  rename(Texte = "contenu",
+         ID = "ID ARTICLE",
+         ASSO = "ID ASSO",
+         type_doc = "Type de document")|>
+  left_join(Base_de_données_site_anti_trans, by = "ASSO")|>
+  rename(type_asso = "Idéologie")
+
+
+base_articles$Texte = base_articles$Texte|>
+  str_replace_all("\\s+", " ") |>
+  str_replace_all("[']", " ") |>
+  str_replace_all("[’]", " ") |>
+  str_replace_all("[`]", " ") |>
+  str_replace_all("\r", " ") |>
+  str_replace_all("\n", " ") |>
+  str_replace_all("[,]",".")
+
+keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuelles",
+              "transgenre", "transgenres", "transidentité", "transsexualité", "transsexualités",
+              "transgender", "non-binaire", "non-binaires", "genderqueer", "intersexe", "intersexes",
+              "queer", "affirmant le genre", "affirmant les genres", "transition de genre",
+              "transitions de genre", "identité de genre", "identités de genre")
+
+# Construction d'une expression régulière à partir des mots-clés pour la recherche
+regex_keywords <- paste(keywords, collapse = "|")
+
+# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'Texte'
+filtered_data <- base_articles %>%
+  filter(grepl(regex_keywords, Texte, ignore.case = TRUE))
+
+cp <- corpus(filtered_data$Texte, 
+             docvars = filtered_data |> select(ID,
+                                    ASSO, Date, type_doc, type_asso) |> as.data.frame(), 
+             docnames = filtered_data$ID)
+# tokenisation
+tk_original <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
+```
+
+
+```{r}
+toremove <- c(stopwords("fr"), stopwords("en"),
+              "plus",
+              "comme",
+              "fait",
+              "ça",
+              "tout",
+              "avoir",
+              "très",
+              "si",
+              "alors",
+              "entre",
+              "donc",
+              "ans",
+              "peut",
+              "deux",
+              "elles",
+              "travail",
+              "parce",
+              "autres",
+              "faire",
+              "quand",
+              "car",
+              "temps",
+              "réalité",
+              "dit",
+              "dont",
+              "après",
+              "dire",
+              "fois",
+              "aussi",
+              "pouvez",
+              "ainsi",
+              "où",
+              "monde",
+              "plusieurs",
+              "article",
+              "chez",
+              "certaines",
+              "cas",
+              "vie",
+              "tous",
+              "souvent",
+              "toutes",
+              "bien",
+              "quelques",
+              "surpatreon",
+              "terme",
+              "pourquoi",
+              "également",
+              ">",
+              "autre",
+              "peuvent",
+              "sens",
+              "encore",
+              "faits",
+              "ensemble",
+              "toujours",
+              "question",
+              "non",
+              "afin",
+              "chose",
+              "depuis",
+              "commencé",
+              "co-fondatrice",
+              "beaucoup",
+              "parmarguerite",
+              "années",
+              "→",
+              "selon",
+              "this:twitterfacebookj",
+              "aimechargement",
+              "←",
+              "commentaireannuler",
+              "réponse.δce",
+              "akismet",
+              "indésirables.en")
+
+tk <- tokens_remove(tk_original,toremove)
+
+# DFM format
+dfm <- dfm(tk) |>
+  dfm_remove(toremove) |>
+  dfm_trim(min_termfreq = 5)
+```
+
+```{r}
+print(textstat_frequency(dfm, n=100))|> select(feature) |> kable()
+```
+
+# Stat desc 
+
+## Frequency
+
+```{r}
+dfm %>% 
+  textstat_frequency(n = 15) %>% 
+  ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
+  geom_point() +
+  coord_flip() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal()
+```
+
+
+```{r}
+#| eval: true
+#| output: true
+#| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
+#| label: fig-wordcloud
+palette <-ggprism::prism_color_pal("winter_bright")(9)
+textplot_wordcloud(dfm, min_count = 100, random_order = FALSE, rotation = 0.25,
+                   color = palette)
+```
+
+## Fréquence certains mots
+```{r}
+# Liste des mots clés
+keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
+
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")
+
+# Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+df_keywords$type_doc <- filtered_data$type_doc
+
+# Calculer la somme des fréquences pour chaque mot clé par type_doc
+df_freq <- df_keywords %>% 
+  group_by(type_doc) %>%
+  summarise(across(keywords, sum, na.rm = TRUE)) %>%
+  pivot_longer(-type_doc, names_to = "keyword", values_to = "frequency")
+
+# Créer le graphique avec ggplot2
+ggplot(df_freq, aes(x = keyword, y = frequency, fill = type_doc)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Fréquence des mots clés par type de document",
+       x = "Mot clé", y = "Fréquence") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+library(quanteda)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Suppose 'dfm_corpus' is your Document-Feature Matrix and 'data' is your dataframe including the 'type_asso' variable
+data = filtered_data
+dfm_corpus = dfm
+# List of keywords
+keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+
+# Filter the DFM to keep only the keywords
+dfm_keywords <- dfm_select(dfm_corpus, pattern = keywords, selection = "keep")
+
+# Add the 'type_asso' covariate from your 'data' dataframe
+# Make sure the order of documents in 'data' corresponds to that in 'dfm_corpus'
+dfm_keywords$type_asso <- data$type_asso
+
+# Convert the filtered DFM to a dataframe for analysis
+df_keywords <- convert(dfm_keywords, to = "data.frame")
+df_keywords$type_asso <- data$type_asso  # Make sure to add 'type_asso' correctly
+
+# Calculate the relative frequency of keywords by type_asso
+df_freq_rel <- df_keywords %>% 
+  group_by(type_asso) %>%
+  summarise(across(keywords, sum, na.rm = TRUE)) %>%
+  mutate(total_docs = n()) %>%
+  pivot_longer(-c(type_asso, total_docs), names_to = "keyword", values_to = "frequency") %>%
+  mutate(frequency_per_doc = frequency / total_docs)
+
+# Create the graph with ggplot2
+ggplot(df_freq_rel, aes(x = keyword, y = frequency_per_doc, fill = type_asso)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Relative Frequency of Keywords by Association Type",
+       x = "Keyword", y = "Frequency per Document") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+# Choix nombre de topics
+
+```{r}
+#| eval: true
+recompute_choix_K = FALSE
+tm_data <- quanteda::convert(dfm, to = "topicmodels")
+stm_data <- convert(dfm, to = "stm")
+
+
+if(recompute_choix_K){
+  list_nb_topics_K <- seq(5, 20, 2)
+
+  tp_nb <- FindTopicsNumber(tm_data, topics = list_nb_topics_K, 
+                          metrics = c("Griffiths2004", "CaoJuan2009", 
+                                      "Arun2010", "Deveaud2014"),
+                          method = "Gibbs")
+
+  diag <- searchK(stm_data$documents, stm_data$vocab, 
+                  list_nb_topics_K, 
+                  verbose=FALSE)
+  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240206_metrics.RData")
+} else{
+  load("../data/results/LDA_report_20240206_metrics.RData")
+}
+
+```
+
+## Métriques
+
+```{r}
+#| eval: true
+#| output: true
+#| fig-cap: Evolution des différentes métriques en fonction du nombre de topics
+#| fig-subcap: Commenter métriques/résultats
+#| label: fig-lda-metrics
+
+FindTopicsNumber_plot(tp_nb)+
+  theme_prism()+
+  scale_colour_prism("winter_bright")
+  
+```
+## Exclusivité et cohérence sémantique
+```{r}
+#| eval: true
+#| output: true
+#| fig-cap: Cohérence sémantique et excluvité en fonction du nombre de topics
+#| label: fig-lda-exclu_cohsem
+map(diag$results, unlist) |> 
+  bind_cols() |> 
+  ggplot(aes(exclus, semcoh, label = K)) +
+    geom_point() +
+    geom_label() +
+  theme_prism()
+```
+
+# STM
+```{r}
+num_topic = 11
+```
+
+```{r}
+#| eval: true
+
+stm_data <- convert(dfm, to = "stm")
+
+stm_lda <- stm(dfm,
+               K=num_topic, 
+               prevalence =~factor(type_doc) + factor(type_asso) ,
+               #content =~ ,
+               init.type = "Spectral",
+               seed = seed, 
+               verbose = FALSE)
+```
+
+```{r}
+toLDAvis(stm_lda, stm_data$documents,reorder.topics = FALSE)
+
+```
+```{r}
+labelTopics(stm_lda)
+
+```
+```{r}
+plot(stm_lda, type = "summary", labeltype = "prob")
+
+```
+```{r}
+plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+```
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(4,3))
+
+```
+
+```{r}
+corrmat <- topicCorr(stm_lda)
+plot(corrmat)
+```
+## Effet des métadonnées
+
+```{r}
+#| eval: true
+stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ factor(ASSO) + factor(type_doc), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
+```
+```{r}
+summary_stm_main_effects
+```
+
+```{r}
+# Supposons que 'effets' est l'objet retourné par estimateEffect
+effets <- estimateEffect(formula = 1:num_topic ~ factor(type_asso) + factor(type_doc), 
+                         stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
+
+# Extraction des résumés des effets pour chaque sujet
+summaries <- summary(effets, topics = 1:num_topic)
+
+# Pour chaque sujet, filtrer et afficher uniquement les coefficients significatifs
+
+cat("\n\n\n\n")
+for (i in 1:num_topic) {
+  cat("Topic", i, ":\n\n")
+  
+  # Extrait les coefficients et p-valeurs pour le sujet courant
+  coeffs <- summaries$tables[[i]]
+  
+  # Filtrer pour garder uniquement les coefficients significatifs
+  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.05, ]
+  
+  # Si aucun coefficient significatif, afficher un message
+  if (length(significant_coeffs) == 0) {
+    cat("No significant coefficients for this topic.\n\n")
+  } else {
+    print(significant_coeffs)
+  }
+  
+  cat("\n---\n")
+}
+
+```
+
