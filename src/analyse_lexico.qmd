@@ -13,11 +13,14 @@ pacman::p_load(tidyverse,
                
                quanteda,
                quanteda.textstats,
+               quanteda.textplots,
+
+               tidytext,
+                              
                stm,
                topicmodels,
                LDAvis,
                ldatuning,
-               quanteda.textplots,
                
                ggprism,
                ggpmisc,
@@ -222,6 +225,35 @@ wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE,
 
 wordcloud_plot
 ```
+## TF IDF
+
+```{r}
+tidy_dfm <- tidy(dfm)|>
+  bind_tf_idf(term,document,count)|>
+  rename(ID = document)|>
+  left_join(dfm@docvars|>
+             rename(ID = docid_)|>
+             select(ID,Idéologie), by = "ID")
+tidy_dfm|>
+  group_by(Idéologie,term)|>
+  summarise(tf_idf = mean(tf_idf))|>
+  arrange(-tf_idf)|>
+  group_by(Idéologie)|>
+  top_n(10)|>
+  ungroup()|>
+  mutate(term = reorder_within(term, tf_idf, Idéologie)) |>
+  ggplot(aes(term, tf_idf, fill = Idéologie)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ Idéologie, scales = "free", ncol = 2) +
+  scale_x_reordered() +
+  coord_flip() +
+  theme(strip.text=element_text(size=11)) +
+  labs(x = NULL, y = "tf-idf",
+       title = "Top 10 TF-IDF par Idéologies")+
+  theme_prism()+
+  scale_fill_manual(values = couleurs_ideologie)
+  
+```
 
 ## Fréquence certains mots par idéologie
 ```{r}
@@ -386,6 +418,7 @@ if(save_figure){
 ```
 
 # STM
+## Model
 ```{r}
 num_topic = 9
 ```
@@ -397,15 +430,17 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_lda <- stm(dfm,
                K=num_topic, 
-               prevalence =~factor(Idéologie) ,
+               prevalence =~factor(Idéologie) + factor(Asso),
                #content =~ ,
                init.type = "Spectral",
                seed = seed, 
                verbose = FALSE)
 ```
 
+## Exploration topics
+
 ```{r}
-toLDAvis(stm_lda, stm_data$documents,reorder.topics = FALSE)
+# toLDAvis(stm_lda, stm_data$documents,reorder.topics = FALSE)
 
 ```
 ```{r}
@@ -414,33 +449,33 @@ labelTopics(stm_lda)
 ```
 ```{r}
 plot(stm_lda, type = "summary", labeltype = "prob")
-if(save_figure){
-  pdf("../output/lda/label_prob.pdf")
-  dev.off()
-}
+# if(save_figure){
+#   png("../output/lda/label_prob.png")
+#   dev.off()
+# }
 ```
 ```{r}
 plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
-if(save_figure){
-  pdf("../output/lda/top20_prob.pdf")
-  dev.off()
-}
+# if(save_figure){
+#   pdf("../output/lda/top20_prob.pdf")
+#   dev.off()
+# }
 
 ```
 
 ```{r}
 plot(stm_lda, type = "summary", labeltype = "frex")
-if(save_figure){
-  pdf("../output/lda/label_frex.pdf")
-  dev.off()
-}
+# if(save_figure){
+#   pdf("../output/lda/label_frex.pdf")
+#   dev.off()
+# }
 ```
 ```{r}
 plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
-if(save_figure){
-  pdf("../output/lda/top20_frex.pdf")
-  dev.off()
-}
+# if(save_figure){
+#   pdf("../output/lda/top20_frex.pdf")
+#   dev.off()
+# }
 
 ```
 
@@ -453,6 +488,7 @@ plot(stm_lda, type = "perspectives", topics = c(4,3))
 corrmat <- topicCorr(stm_lda)
 plot(corrmat)
 ```
+## Figure
 ## Effet des métadonnées
 
 ```{r}
