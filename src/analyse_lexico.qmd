@@ -249,12 +249,37 @@ tidy_dfm|>
   coord_flip() +
   theme(strip.text=element_text(size=11)) +
   labs(x = NULL, y = "tf-idf",
+       title = "Top 10 mean TF-IDF par Idéologies")+
+  theme_prism()+
+  scale_fill_manual(values = couleurs_ideologie)
+  
+```
+```{r}
+tidy(dfm)|>
+  rename(ID = document)|>
+  left_join(dfm@docvars|>
+             rename(ID = docid_)|>
+             select(ID,Idéologie), by = "ID")|>
+  group_by(term,Idéologie,count)|>
+  summarise()|>
+  bind_tf_idf(term,Idéologie,count)|>
+  arrange(-tf_idf)|>
+  group_by(Idéologie)|>
+  top_n(10)|>
+  ungroup()|>
+  mutate(term = reorder_within(term, tf_idf, Idéologie)) |>
+  ggplot(aes(term, tf_idf, fill = Idéologie)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ Idéologie, scales = "free", ncol = 2) +
+  scale_x_reordered() +
+  coord_flip() +
+  theme(strip.text=element_text(size=11)) +
+  labs(x = NULL, y = "tf-idf",
        title = "Top 10 TF-IDF par Idéologies")+
   theme_prism()+
   scale_fill_manual(values = couleurs_ideologie)
   
 ```
-
 ## Fréquence certains mots par idéologie
 ```{r}
 # Liste des mots clés
