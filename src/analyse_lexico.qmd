@@ -24,11 +24,14 @@ pacman::p_load(tidyverse,
                RJSONIO,
                ggrepel,
                ggcorrplot,
+               ggpubr,
                
                stringr,
                readr,
                readxl
             )
+
+couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
@@ -103,7 +106,7 @@ keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuell
 regex_keywords <- paste(keywords, collapse = "|")
 
 # Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'text'
-filtered_data <- base_articles %>%
+filtered_data <- base_articles |>
   filter(grepl(regex_keywords, text, ignore.case = TRUE))
 
 cp <- corpus(filtered_data$text, 
@@ -135,9 +138,9 @@ textstat_frequency(dfm, n=100)
 
 ```{r}
 # Calculer les nombres d'occurence
-occurence_asso <- table(filtered_data$Asso) %>% 
-  as.data.frame() %>%
-  rename(Association = Var1, Occurences = Freq) %>%
+occurence_asso <- table(filtered_data$Asso) |> 
+  as.data.frame() |>
+  rename(Association = Var1, Occurences = Freq) |>
   arrange(desc(Occurences))
 
 latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des Associations")
@@ -147,11 +150,12 @@ writeLines(latex_table, "../output/descriptive/tableau_occurence_asso.tex")
 
 kable(occurence_asso, format = "html", caption = "Occurences des Associations")
 ```
+
 ```{r}
 # Calculer les nombres d'occurence
-occurence_asso <- table(filtered_data$Idéologie) %>% 
-  as.data.frame() %>%
-  rename(Idéologie = Var1, Occurences = Freq) %>%
+occurence_asso <- table(filtered_data$Idéologie) |> 
+  as.data.frame() |>
+  rename(Idéologie = Var1, Occurences = Freq) |>
   arrange(desc(Occurences))
 
 latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des idéologies")
@@ -162,15 +166,29 @@ writeLines(latex_table, "../output/descriptive/tableau_occurence_idéo.tex")
 kable(occurence_asso, format = "html", caption = "Occurences des Associations")
 ```
 
+```{r}
+hist_occurences_doc <- ggplot(occurence_asso, aes(x = Idéologie, y = Occurences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de documents par idéologie",
+       x = "Idéologie", y = "Occurences") +
+  theme_prism() +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave("../output/descriptive/hist_occurences_doc_ideologies.pdf", plot = hist_occurences_doc)
+hist_occurences_doc
+
+```
+
 ## Frequency
 
 ```{r}
-dfm %>% 
-  textstat_frequency(n = 15) %>% 
+dfm |> 
+  textstat_frequency(n = 15) |> 
   ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
   geom_point() +
   coord_flip() +
-  labs(x = NULL, y = "Frequency") +
+  labs(x = NULL, y = "Occurences") +
   theme_minimal()
 ```
 
@@ -181,81 +199,75 @@ dfm %>%
 #| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
-textplot_wordcloud(dfm, min_count = 100, random_order = FALSE, rotation = 0.25,
+textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
                    color = palette)
 ```
 
-## Fréquence certains mots
+## Fréquence certains mots par idéologie
 ```{r}
 # Liste des mots clés
-keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+keywords <- c("pouvoir", "genre", "enfant", "lesbien")
 
 # Filtrer le DFM pour ne garder que les mots clés
 dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
 
 # Convertir le DFM filtré en dataframe pour l'analyse
-df_keywords <- convert(dfm_keywords, to = "data.frame")
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
 
-# Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
-df_keywords$type_doc <- filtered_data$type_doc
+# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+# df_keywords$Idéologie <- filtered_data$Idéologie
 
-# Calculer la somme des fréquences pour chaque mot clé par type_doc
-df_freq <- df_keywords %>% 
-  group_by(type_doc) %>%
-  summarise(across(keywords, sum, na.rm = TRUE)) %>%
-  pivot_longer(-type_doc, names_to = "keyword", values_to = "frequency")
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ 1000 * .x / n_words))|>
+  group_by(Idéologie) |>
+  summarise(across(keywords, mean, na.rm = TRUE)) |>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
-# Créer le graphique avec ggplot2
-ggplot(df_freq, aes(x = keyword, y = frequency, fill = type_doc)) +
+hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Fréquence des mots clés par type de document",
-       x = "Mot clé", y = "Fréquence") +
-  scale_fill_brewer(palette = "Set3") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
+  theme_prism() +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
+ggsave("../output/descriptive/hist_freq_keywords_ideologies.pdf", plot = hist_freq_keywords)
+hist_freq_keywords
 ```
 ```{r}
-library(quanteda)
-library(dplyr)
-library(ggplot2)
-library(tidyr)
+# Liste des mots clés
+keywords <- c("pouvoir", "genre", "enfant", "lesbien")
 
-# Suppose 'dfm_corpus' is your Document-Feature Matrix and 'data' is your dataframe including the 'type_asso' variable
-data = filtered_data
-dfm_corpus = dfm
-# List of keywords
-keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
 
-# Filter the DFM to keep only the keywords
-dfm_keywords <- dfm_select(dfm_corpus, pattern = keywords, selection = "keep")
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
 
-# Add the 'type_asso' covariate from your 'data' dataframe
-# Make sure the order of documents in 'data' corresponds to that in 'dfm_corpus'
-dfm_keywords$type_asso <- data$type_asso
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ 1000 * .x / n_words))|>
+  select(any_of(keywords),Idéologie)|>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
-# Convert the filtered DFM to a dataframe for analysis
-df_keywords <- convert(dfm_keywords, to = "data.frame")
-df_keywords$type_asso <- data$type_asso  # Make sure to add 'type_asso' correctly
-
-# Calculate the relative frequency of keywords by type_asso
-df_freq_rel <- df_keywords %>% 
-  group_by(type_asso) %>%
-  summarise(across(keywords, sum, na.rm = TRUE)) %>%
-  mutate(total_docs = n()) %>%
-  pivot_longer(-c(type_asso, total_docs), names_to = "keyword", values_to = "frequency") %>%
-  mutate(frequency_per_doc = frequency / total_docs)
-
-# Create the graph with ggplot2
-ggplot(df_freq_rel, aes(x = keyword, y = frequency_per_doc, fill = type_asso)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Relative Frequency of Keywords by Association Type",
-       x = "Keyword", y = "Frequency per Document") +
-  scale_fill_brewer(palette = "Set3") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
+boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
+  theme_prism() +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
+ggsave("../output/descriptive/boxplot_freq_keywords.pdf", plot = boxplot_freq_keywords)
+boxplot_freq_keywords
 ```
 
 
