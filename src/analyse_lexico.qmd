@@ -36,6 +36,8 @@ couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
+save_figure = FALSE
+
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
 ```
@@ -146,7 +148,9 @@ occurence_asso <- table(filtered_data$Asso) |>
 latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des Associations")
 
 # Sauvegarder le tableau LaTeX dans un fichier
-writeLines(latex_table, "../output/descriptive/tableau_occurence_asso.tex")
+if(save_figure){
+  writeLines(latex_table, "../output/descriptive/tableau_occurence_asso.tex")
+}
 
 kable(occurence_asso, format = "html", caption = "Occurences des Associations")
 ```
@@ -161,7 +165,9 @@ occurence_asso <- table(filtered_data$Idéologie) |>
 latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des idéologies")
 
 # Sauvegarder le tableau LaTeX dans un fichier
-writeLines(latex_table, "../output/descriptive/tableau_occurence_idéo.tex")
+if(save_figure){
+  writeLines(latex_table, "../output/descriptive/tableau_occurence_idéo.tex")
+}
 
 kable(occurence_asso, format = "html", caption = "Occurences des Associations")
 ```
@@ -175,7 +181,10 @@ hist_occurences_doc <- ggplot(occurence_asso, aes(x = Idéologie, y = Occurences
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
-ggsave("../output/descriptive/hist_occurences_doc_ideologies.pdf", plot = hist_occurences_doc)
+if(save_figure){
+  ggsave("../output/descriptive/hist_occurences_doc_ideologies.pdf", plot = hist_occurences_doc)
+}
+
 hist_occurences_doc
 
 ```
@@ -236,7 +245,11 @@ hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéo
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
-ggsave("../output/descriptive/hist_freq_keywords_ideologies.pdf", plot = hist_freq_keywords)
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_freq_keywords_ideologies.pdf", plot = hist_freq_keywords)
+}
+
 hist_freq_keywords
 ```
 ```{r}
@@ -266,7 +279,11 @@ boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", f
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
-ggsave("../output/descriptive/boxplot_freq_keywords.pdf", plot = boxplot_freq_keywords)
+
+if(save_figure){
+  ggsave("../output/descriptive/boxplot_freq_keywords.pdf", plot = boxplot_freq_keywords)
+}
+
 boxplot_freq_keywords
 ```
 
@@ -281,7 +298,7 @@ stm_data <- convert(dfm, to = "stm")
 
 
 if(recompute_choix_K){
-  list_nb_topics_K <- seq(5, 20, 2)
+  list_nb_topics_K <- seq(5, 20, 1)
 
   tp_nb <- FindTopicsNumber(tm_data, topics = list_nb_topics_K, 
                           metrics = c("Griffiths2004", "CaoJuan2009", 
@@ -291,9 +308,9 @@ if(recompute_choix_K){
   diag <- searchK(stm_data$documents, stm_data$vocab, 
                   list_nb_topics_K, 
                   verbose=FALSE)
-  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240206_metrics.RData")
+  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240222_metrics.RData")
 } else{
-  load("../data/results/LDA_report_20240206_metrics.RData")
+  load("../data/results/LDA_report_20240222_metrics.RData")
 }
 
 ```
@@ -307,11 +324,36 @@ if(recompute_choix_K){
 #| fig-subcap: Commenter métriques/résultats
 #| label: fig-lda-metrics
 
-FindTopicsNumber_plot(tp_nb)+
-  theme_prism()+
-  scale_colour_prism("winter_bright")
-  
+FindTopicsNumber_plot(tp_nb)
+
 ```
+
+```{r}
+tp_nb_custom <- tp_nb|>
+  pivot_longer(cols=c("Griffiths2004","CaoJuan2009","Arun2010","Deveaud2014"), names_to = "metricsType",values_to = "metrics")|>
+  mutate(category = ifelse(metricsType %in% c("Arun2010","CaoJuan2009"),"minimize","maximize"))|>
+  group_by(metricsType)|>
+  mutate(max = max(metrics),
+         min = min(metrics))|>
+  mutate(metrics = (metrics-min)/(max-min))|>
+  ungroup()
+  
+
+custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = metricsType, group = metricsType, shape = metricsType)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~category, ncol = 1) + # Separate plots for Minimize vs Maximize
+  scale_color_prism(palette = "winter_bright") +
+  theme_prism() + # Use ggpubr theme
+  labs(x = "number of topics", y = NULL, color = "metrics:",shape = "metrics:") +
+  theme(legend.position = "right",
+        legend.title = element_text())
+if(save_figure){
+  ggsave("../output/lda/find_topic_number_metrics.pdf",plot = custom_tp_nb_plot)
+}
+custom_tp_nb_plot
+```
+
 ## Exclusivité et cohérence sémantique
 ```{r}
 #| eval: true
@@ -328,7 +370,7 @@ map(diag$results, unlist) |>
 
 # STM
 ```{r}
-num_topic = 11
+num_topic = 9
 ```
 
 ```{r}
