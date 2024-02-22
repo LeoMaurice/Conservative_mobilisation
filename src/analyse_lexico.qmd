@@ -92,7 +92,7 @@ base_articles$Asso|> table()
 base_articles|>
   group_by(ID_ASSO)|>
   slice_sample(n = 1)|>
-  ungroup()|>View()
+  ungroup()
 
 ```
 
@@ -117,7 +117,8 @@ cp <- corpus(filtered_data$text,
 
 # words to remove
 toremove <- readLines("../data/intermediate/words_to_filter.txt")
-toremove <- c(stopwords("en"),stopwords("fr"),toremove)
+toremove <- c(stopwords("en"),stopwords("fr"),toremove,
+              "femme","homme","p")
 
 # tokenisation
 tk <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
@@ -192,13 +193,18 @@ hist_occurences_doc
 ## Frequency
 
 ```{r}
-dfm |> 
+most_frequent_words_plot <- dfm |> 
   textstat_frequency(n = 15) |> 
   ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
   geom_point() +
   coord_flip() +
   labs(x = NULL, y = "Occurences") +
   theme_minimal()
+
+if(save_figure){
+  ggsave("../output/descriptive/most_frequent_words.pdf", plot = most_frequent_words_plot)
+}
+most_frequent_words_plot
 ```
 
 
@@ -210,9 +216,11 @@ dfm |>
 palette <-ggprism::prism_color_pal("winter_bright")(9)
 wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
                    color = palette)
-if(save_figure){
-  ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf")
-}
+# if(save_figure){
+#   ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf", plot = wordcloud_plot)
+# }
+
+wordcloud_plot
 ```
 
 ## Fréquence certains mots par idéologie
@@ -365,13 +373,16 @@ custom_tp_nb_plot
 #| output: true
 #| fig-cap: Cohérence sémantique et excluvité en fonction du nombre de topics
 #| label: fig-lda-exclu_cohsem
-map(diag$results, unlist) |> 
+semcoh_exclu_plot<- map(diag$results, unlist) |> 
   bind_cols() |> 
   ggplot(aes(exclus, semcoh, label = K)) +
   labs(y = "cohérence sémantique",x = "exclusivité")+
     geom_point() +
     geom_label() +
   theme_prism()
+if(save_figure){
+  ggsave("../output/lda/semcoh_exlu.pdf",plot = semcoh_exclu_plot)
+}
 ```
 
 # STM
@@ -403,11 +414,36 @@ labelTopics(stm_lda)
 ```
 ```{r}
 plot(stm_lda, type = "summary", labeltype = "prob")
-
+if(save_figure){
+  pdf("../output/lda/label_prob.pdf")
+  dev.off()
+}
 ```
 ```{r}
 plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+if(save_figure){
+  pdf("../output/lda/top20_prob.pdf")
+  dev.off()
+}
+
 ```
+
+```{r}
+plot(stm_lda, type = "summary", labeltype = "frex")
+if(save_figure){
+  pdf("../output/lda/label_frex.pdf")
+  dev.off()
+}
+```
+```{r}
+plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
+if(save_figure){
+  pdf("../output/lda/top20_frex.pdf")
+  dev.off()
+}
+
+```
+
 ```{r}
 plot(stm_lda, type = "perspectives", topics = c(4,3))
 
@@ -437,7 +473,7 @@ for (i in 1:num_topic) {
   coeffs <- summaries$tables[[i]]
   
   # Filtrer pour garder uniquement les coefficients significatifs
-  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.05, ]
+  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.1, ]
   
   # Si aucun coefficient significatif, afficher un message
   if (length(significant_coeffs) == 0) {
