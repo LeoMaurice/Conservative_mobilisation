@@ -10,25 +10,22 @@ pacman::p_load(tidyverse,
                lubridate,
                here,
                knitr,
+               
                quanteda,
                quanteda.textstats,
                stm,
                topicmodels,
                LDAvis,
                ldatuning,
-               readr,
                quanteda.textplots,
+               
                ggprism,
                ggpmisc,
                RJSONIO,
                ggrepel,
                ggcorrplot,
-               pdftools,
-               #pdftk, pas dispo
-               #tabulizer,
-               tesseract,
+               
                stringr,
-               openxlsx,
                readr,
                readxl
             )
@@ -41,24 +38,37 @@ set.seed(seed)
 ```
 
 # Ouverture données
+```{r}
+Base_de_données_anti_trans <- read_excel("../data/Base de données anti trans.xlsx", 
+    col_types = c("text", "text", "skip", 
+        "skip", "text", "skip", "skip", "skip"))|>
+  rename(ID_ASSO = Id,
+         Asso = nom,
+         Idéologie = Idéologie_simplifiée)|>
+  mutate(Idéologie = as.factor(Idéologie))
+```
 
 ```{r}
-# modifié ID, mettre les ID mis en place par Fynch
-Base_de_données_site_anti_trans <- read_excel("../Base de données site anti-trans.xlsx")|>
-  rename(ASSO = Id)
-
-base_articles <- read_delim("../data/base_def.tsv", 
-    delim = "\t", escape_double = FALSE, 
+base_articles <- read_delim("../data/intermediate/base_lemmatized.csv", 
+    delim = ";", escape_double = FALSE, col_types = cols(`ID ASSO` = col_character(), 
+        `ID ARTICLE` = col_character(), contenu = col_character(), 
+        `Type de document` = col_character(), 
+        Auteur = col_character(), Date = col_datetime(format = "%d/%m/%Y"), 
+        Titre = col_character(), URL = col_character(), 
+        lemmatized_contenu = col_character()), 
     trim_ws = TRUE)|>
-  rename(Texte = "contenu",
-         ID = "ID ARTICLE",
-         ASSO = "ID ASSO",
-         type_doc = "Type de document")|>
-  left_join(Base_de_données_site_anti_trans, by = "ASSO")|>
-  rename(type_asso = "Idéologie")
+  select(-URL)|>
+  rename(ID = "ID ARTICLE",
+         ID_ASSO = "ID ASSO",
+         text = "lemmatized_contenu",
+         Type_doc = "Type de document")|>
+  left_join(Base_de_données_anti_trans, by = "ID_ASSO")
+
+```
 
 
-base_articles$Texte = base_articles$Texte|>
+```{r}
+base_articles$text = base_articles$text|>
   str_replace_all("\\s+", " ") |>
   str_replace_all("[']", " ") |>
   str_replace_all("[’]", " ") |>
@@ -66,7 +76,23 @@ base_articles$Texte = base_articles$Texte|>
   str_replace_all("\r", " ") |>
   str_replace_all("\n", " ") |>
   str_replace_all("[,]",".")
+```
 
+```{r}
+base_articles$Asso|> table()
+```
+
+
+```{r}
+base_articles|>
+  group_by(ID_ASSO)|>
+  slice_sample(n = 1)|>
+  ungroup()|>View()
+
+```
+
+
+```{r}
 keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuelles",
               "transgenre", "transgenres", "transidentité", "transsexualité", "transsexualités",
               "transgender", "non-binaire", "non-binaires", "genderqueer", "intersexe", "intersexes",
@@ -76,110 +102,65 @@ keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuell
 # Construction d'une expression régulière à partir des mots-clés pour la recherche
 regex_keywords <- paste(keywords, collapse = "|")
 
-# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'Texte'
+# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'text'
 filtered_data <- base_articles %>%
-  filter(grepl(regex_keywords, Texte, ignore.case = TRUE))
+  filter(grepl(regex_keywords, text, ignore.case = TRUE))
 
-cp <- corpus(filtered_data$Texte, 
-             docvars = filtered_data |> select(ID,
-                                    ASSO, Date, type_doc, type_asso) |> as.data.frame(), 
+cp <- corpus(filtered_data$text, 
+             docvars = filtered_data |> select(Asso, Date, Type_doc, Idéologie) |> as.data.frame(), 
              docnames = filtered_data$ID)
+
+# words to remove
+toremove <- readLines("../data/intermediate/words_to_filter.txt")
+toremove <- c(stopwords("en"),stopwords("fr"),toremove)
+
 # tokenisation
-tk_original <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
-```
+tk <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
+tk <- tokens_remove(tk,toremove)
+tk <- tokens_replace(tk, pattern = "tran", replacement = "trans", valuetype = "fixed") # effect of spacy tokenization
 
-
-```{r}
-toremove <- c(stopwords("fr"), stopwords("en"),
-              "plus",
-              "comme",
-              "fait",
-              "ça",
-              "tout",
-              "avoir",
-              "très",
-              "si",
-              "alors",
-              "entre",
-              "donc",
-              "ans",
-              "peut",
-              "deux",
-              "elles",
-              "travail",
-              "parce",
-              "autres",
-              "faire",
-              "quand",
-              "car",
-              "temps",
-              "réalité",
-              "dit",
-              "dont",
-              "après",
-              "dire",
-              "fois",
-              "aussi",
-              "pouvez",
-              "ainsi",
-              "où",
-              "monde",
-              "plusieurs",
-              "article",
-              "chez",
-              "certaines",
-              "cas",
-              "vie",
-              "tous",
-              "souvent",
-              "toutes",
-              "bien",
-              "quelques",
-              "surpatreon",
-              "terme",
-              "pourquoi",
-              "également",
-              ">",
-              "autre",
-              "peuvent",
-              "sens",
-              "encore",
-              "faits",
-              "ensemble",
-              "toujours",
-              "question",
-              "non",
-              "afin",
-              "chose",
-              "depuis",
-              "commencé",
-              "co-fondatrice",
-              "beaucoup",
-              "parmarguerite",
-              "années",
-              "→",
-              "selon",
-              "this:twitterfacebookj",
-              "aimechargement",
-              "←",
-              "commentaireannuler",
-              "réponse.δce",
-              "akismet",
-              "indésirables.en")
-
-tk <- tokens_remove(tk_original,toremove)
-
-# DFM format
 dfm <- dfm(tk) |>
   dfm_remove(toremove) |>
   dfm_trim(min_termfreq = 5)
 ```
 
 ```{r}
-print(textstat_frequency(dfm, n=100))|> select(feature) |> kable()
+textstat_frequency(dfm, n=100)
 ```
 
+
 # Stat desc 
+
+## tableau d'occurences des associations et des idéologies
+
+```{r}
+# Calculer les nombres d'occurence
+occurence_asso <- table(filtered_data$Asso) %>% 
+  as.data.frame() %>%
+  rename(Association = Var1, Occurences = Freq) %>%
+  arrange(desc(Occurences))
+
+latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des Associations")
+
+# Sauvegarder le tableau LaTeX dans un fichier
+writeLines(latex_table, "../output/descriptive/tableau_occurence_asso.tex")
+
+kable(occurence_asso, format = "html", caption = "Occurences des Associations")
+```
+```{r}
+# Calculer les nombres d'occurence
+occurence_asso <- table(filtered_data$Idéologie) %>% 
+  as.data.frame() %>%
+  rename(Idéologie = Var1, Occurences = Freq) %>%
+  arrange(desc(Occurences))
+
+latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des idéologies")
+
+# Sauvegarder le tableau LaTeX dans un fichier
+writeLines(latex_table, "../output/descriptive/tableau_occurence_idéo.tex")
+
+kable(occurence_asso, format = "html", caption = "Occurences des Associations")
+```
 
 ## Frequency
 
