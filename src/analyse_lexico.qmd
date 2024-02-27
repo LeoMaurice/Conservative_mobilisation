@@ -39,11 +39,16 @@ couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
-save_figure = TRUE
+save_figure = FALSE
 
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
 ```
+```{r}
+ggprism::prism_colour_pal("winter_bright")(9)
+
+```
+
 
 # Ouverture données
 ```{r}
@@ -109,12 +114,26 @@ keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuell
               "queer", "affirmant le genre", "affirmant les genres", "transition de genre",
               "transitions de genre", "identité de genre", "identités de genre")
 
+
 # Construction d'une expression régulière à partir des mots-clés pour la recherche
 regex_keywords <- paste(keywords, collapse = "|")
 
 # Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'text'
-filtered_data <- base_articles |>
-  filter(grepl(regex_keywords, text, ignore.case = TRUE))
+# filtered_data <- base_articles |>
+#   filter(grepl(regex_keywords, text, ignore.case = TRUE))
+
+# Function to count occurrences of keywords in a text
+count_keywords <- function(text, keywords) {
+  counts <- sapply(keywords, function(keyword) {
+    sum(grepl(keyword, text, ignore.case = TRUE))
+  })
+  total_count <- sum(counts)
+  return(total_count)
+}
+
+# Filter based on the count of occurrences of keywords
+filtered_data <- base_articles %>%
+  filter(sapply(.$text, count_keywords, keywords) >= 1)
 
 cp <- corpus(filtered_data$text, 
              docvars = filtered_data |> select(Asso, Date, Type_doc, Idéologie,Droite) |> as.data.frame(), 
@@ -209,7 +228,7 @@ hist_asso_droite <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Droit
        x = "Idéologie", y = "Occurences") +
   theme_prism() +
   coord_flip()+
-  scale_fill_prism(palette = "colorblind_safe")
+  scale_fill_manual(values = c("#FF0066","#000000"))
 
 if(save_figure){
   ggsave("../output/descriptive/hist_asso_droite.pdf", plot = hist_asso_droite)
@@ -243,7 +262,7 @@ most_frequent_words_plot
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
 wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
-                   color = palette)
+                   color = "#000080")
 # if(save_figure){
 #   ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf", plot = wordcloud_plot)
 # }
@@ -345,6 +364,73 @@ if(save_figure){
 
 hist_freq_keywords
 ```
+
+```{r}
+keywords <- c("trans")
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
+
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
+
+# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+# df_keywords$Idéologie <- filtered_data$Idéologie
+
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ 1000 * .x / n_words))|>
+  group_by(Idéologie) |>
+  summarise(across(keywords, mean, na.rm = TRUE)) |>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
+
+hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
+  theme_prism() +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
+hist_freq_keywords
+```
+```{r}
+keywords <- c("trans")
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
+
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
+
+# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+# df_keywords$Idéologie <- filtered_data$Idéologie
+
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ .x))|>
+  group_by(Idéologie) |>
+  summarise(across(keywords, mean, na.rm = TRUE)) |>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
+
+hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Occurences moyenne par document (‰)") +
+  theme_prism() +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
+hist_freq_keywords
+```
+
+
 ```{r}
 # Filtrer le DFM pour ne garder que les mots clés
 dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
@@ -468,7 +554,11 @@ semcoh_exclu_plot
 # STM
 ## Model
 ```{r}
-num_topic = 4
+num_topic = 7
+formula = as.formula("~ Droite + factor(Idéologie)") 
+#formula = as.formula("~ Droite") 
+#formula = as.formula("~ factor(Idéologie)") 
+
 ```
 
 ```{r}
@@ -478,7 +568,7 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_lda <- stm(dfm,
                K=num_topic, 
-               prevalence = ~ Droite + factor(Idéologie), #+ factor(Asso),
+               prevalence = formula, #+ factor(Asso),
                #content =~ ,
                init.type = "Spectral",
                seed = seed, 
@@ -542,7 +632,7 @@ tidy_model <- tidy(stm_lda)
 
 figure_top20_prob<- tidy_model |>
     group_by(topic) |>
-    top_n(20, beta) |>
+    top_n(6, beta) |>
     ungroup() |>
     mutate(topic = paste0("Topic ", topic),
            term = reorder_within(term, beta, topic)) |>
@@ -574,7 +664,7 @@ prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
   theme(panel.grid.major.y = element_line(linewidth = 0.2,color = "grey"),
         panel.grid.minor.y = element_line(linewidth = 0.1,color = "grey"))
 if(save_figure){
-  ggsave("../output/lda/prevalence_doc.pdf",plot =prevalence_doc)
+  ggsave("../output/lda/prevalence_doc.pdf",plot = prevalence_doc)
 }
 prevalence_doc
 ```
