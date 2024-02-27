@@ -366,7 +366,9 @@ hist_freq_keywords
 ```
 
 ```{r}
-keywords <- c("trans")
+keywords <- c("trans","transgenre", "transidentité","transgender", 
+              "queer")
+
 # Filtrer le DFM pour ne garder que les mots clés
 dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
 
@@ -376,41 +378,6 @@ df_keywords <- convert(dfm_keywords, to = "data.frame")|>
   left_join(filtered_data|>
               mutate(n_words=nchar(text))|>
               select(ID,n_words,Idéologie), by = "ID")
-
-# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
-# df_keywords$Idéologie <- filtered_data$Idéologie
-
-# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
-df_freq <- df_keywords |> 
-  mutate(across(keywords,~ 1000 * .x / n_words))|>
-  group_by(Idéologie) |>
-  summarise(across(keywords, mean, na.rm = TRUE)) |>
-  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
-
-hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Fréquence des mots clés par idéologie",
-       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_prism() +
-  scale_fill_manual(values = couleurs_ideologie) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-  
-hist_freq_keywords
-```
-```{r}
-keywords <- c("trans")
-# Filtrer le DFM pour ne garder que les mots clés
-dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
-
-# Convertir le DFM filtré en dataframe pour l'analyse
-df_keywords <- convert(dfm_keywords, to = "data.frame")|>
-  rename(ID = doc_id)|>
-  left_join(filtered_data|>
-              mutate(n_words=nchar(text))|>
-              select(ID,n_words,Idéologie), by = "ID")
-
-# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
-# df_keywords$Idéologie <- filtered_data$Idéologie
 
 # Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
 df_freq <- df_keywords |> 
@@ -419,16 +386,23 @@ df_freq <- df_keywords |>
   summarise(across(keywords, mean, na.rm = TRUE)) |>
   pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
-hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
+hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Fréquence des mots clés par idéologie",
-       x = "Mot clé", y = "Occurences moyenne par document (‰)") +
+  labs(title = "Occurences des mots du filtre par idéologie",
+       x = "Mot clé", y = "Occurences moyenne par document") +
   theme_prism() +
   scale_fill_manual(values = couleurs_ideologie) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-  
-hist_freq_keywords
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_hline(yintercept = 1, linetype = "dashed")+
+  geom_hline(yintercept = 5, linetype = "dashed")+
+  geom_hline(yintercept = 3, linetype = "dashed")
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_occurences_filtre.pdf", plot = hist_occurences_filtre)
+}
+hist_occurences_filtre
 ```
+
 
 
 ```{r}
