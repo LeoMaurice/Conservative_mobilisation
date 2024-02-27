@@ -39,7 +39,7 @@ couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
-save_figure = FALSE
+save_figure = T
 
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
@@ -140,7 +140,7 @@ cp <- corpus(filtered_data$text,
              docnames = filtered_data$ID)
 
 # too frequent words
-too_frequent_words <- c("femme","homme","personne","pouvoir","sexe","genre")
+too_frequent_words <- c("femme","homme","personne","sexe","genre")
 # words to remove
 toremove <- readLines("../data/intermediate/words_to_filter.txt")
 toremove <- c(stopwords("en"),stopwords("fr"),toremove,
