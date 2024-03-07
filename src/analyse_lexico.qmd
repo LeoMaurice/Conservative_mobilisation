@@ -44,6 +44,13 @@ save_figure = T
 
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
+text_size = 14
+theme_ready <- theme_pubclean()+
+    theme(text = element_text(size = text_size),
+        axis.title = element_text(size = text_size+2, face="bold"),
+        axis.text = element_text(size = text_size),
+        legend.title = element_text(size = text_size),
+        legend.text = element_text(size = text_size-2))
 ```
 ```{r}
 ggprism::prism_colour_pal("winter_bright")(9)
@@ -212,7 +219,7 @@ hist_occurences_doc <- ggplot(occurence_asso, aes(x = Idéologie, y = Occurences
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Nombre de documents par idéologie",
        x = "Idéologie", y = "Occurences") +
-  theme_pubclean() +
+  theme_ready +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
@@ -234,7 +241,7 @@ hist_asso_droite <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Droit
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Nombre de documents par Association",
        x = "Idéologie", y = "Occurences") +
-  theme_pubclean() +
+  theme_ready +
   coord_flip()+
   scale_fill_manual(values = c("#FF0066","#000000"))
 
@@ -302,7 +309,7 @@ tidy_dfm|>
   theme(strip.text=element_text(size=11)) +
   labs(x = NULL, y = "tf-idf",
        title = "Top 10 mean TF-IDF par Idéologies")+
-  theme_pubclean()+
+  theme_ready+
   scale_fill_manual(values = couleurs_ideologie)
   
 ```
@@ -328,7 +335,7 @@ tidy(dfm)|>
   theme(strip.text=element_text(size=11)) +
   labs(x = NULL, y = "tf-idf",
        title = "Top 10 TF-IDF par Idéologies")+
-  theme_pubclean()+
+  theme_ready+
   scale_fill_manual(values = couleurs_ideologie)
   
 ```
@@ -361,7 +368,7 @@ hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéo
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Fréquence des mots clés par idéologie",
        x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_pubclean() +
+  theme_ready +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
@@ -398,7 +405,7 @@ hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = I
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Occurences des mots du filtre par idéologie",
        x = "Mot clé", y = "Occurences moyenne par document") +
-  theme_pubclean() +
+  theme_ready +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
   geom_hline(yintercept = 1, linetype = "dashed")+
@@ -433,7 +440,7 @@ df_freq <- df_keywords |>
 boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
   labs(title = "Fréquence des mots clés par idéologie",
        x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_pubclean() +
+  theme_ready +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
@@ -502,7 +509,7 @@ custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = m
   geom_point() +
   facet_wrap(~category, ncol = 1) + # Separate plots for Minimize vs Maximize
   scale_color_prism(palette = "winter_bright") +
-  theme_pubclean() + # Use ggpubr theme
+  theme_ready + # Use ggpubr theme
   labs(x = "number of topics", y = NULL, color = "metrics:",shape = "metrics:") +
   theme(legend.position = "right",
         legend.title = element_text(),
@@ -526,7 +533,7 @@ semcoh_exclu_plot<- map(diag$results, unlist) |>
   labs(y = "cohérence sémantique",x = "exclusivité")+
     geom_point() +
     geom_label() +
-  theme_pubclean()
+  theme_ready
 if(save_figure){
   ggsave("../output/lda/semcoh_exlu.pdf",plot = semcoh_exclu_plot)
 }
@@ -619,7 +626,7 @@ figure_top20_prob<- tidy_model |>
     labs(x = NULL, y = expression(beta),
          title = "Probabilités de mots les plus élevés pour chaque thème",
          subtitle = "Différents mots sont associés à différents sujets")+
-  theme_pubclean()+
+  theme_ready+
   theme(axis.text.y = element_text(size = 8))
 if(save_figure){
   ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob)
@@ -635,7 +642,7 @@ prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
   labs(title = "Distribution des probabilités des documents pour chaque thème",
        subtitle = "Chaque thème est associé à quelques documents",
        y = "Nombre de document", x = expression(gamma))+
-  theme_pubclean()+
+  theme_ready+
   theme(panel.grid.major.y = element_line(linewidth = 0.2,color = "grey"),
         panel.grid.minor.y = element_line(linewidth = 0.1,color = "grey"))
 if(save_figure){
@@ -683,22 +690,64 @@ for (i in 1:num_topic) {
   cat("Topic", i, ":\n\n")
   
   # Extrait les coefficients et p-valeurs pour le sujet courant
-  coeffs <- summaries$tables[[i]]
+  coeffs <- as.data.frame(summaries$tables[[i]])|>
+    mutate(Significance = ifelse(`Pr(>|t|)` <= 0.001, "***", 
+                                ifelse(`Pr(>|t|)` <= 0.01, "**",
+                                ifelse(`Pr(>|t|)` <= 0.05, "*", 
+                                ifelse(`Pr(>|t|)` <= 0.1, "•"," ")))),
+           Topic = i,
+           err_min = Estimate- 1.96*`Std. Error`,
+           err_max = Estimate+ 1.96*`Std. Error`)
+  coeffs$Variable <- rownames(coeffs)
   
   # Filtrer pour garder uniquement les coefficients significatifs
-  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.1, ]
-  
+  significant_coeffs <- coeffs|>
+    filter(`Pr(>|t|)`<=0.1)
+  if(i==1)
+    total_coeffs <- coeffs
+  else
+    total_coeffs <- rbind(total_coeffs,coeffs)
   # Si aucun coefficient significatif, afficher un message
   if (length(significant_coeffs) == 0) {
     cat("No significant coefficients for this topic.\n\n")
   } else {
-    print(significant_coeffs)
+    print(list(significant_coeffs|>
+                 select(Estimate,`Std. Error`, `Pr(>|t|)`, Significance))[1])
   }
   
   cat("\n---\n")
 }
 
 ```
+
+```{r}
+labels_variable = c(
+  "(Intercept)"="Constante",
+  "CTTRUE"="Catholique",
+  "EDTRUE"="Education",
+  "XDTRUE"="Extrême-droite",
+  "FETRUE"="Féministe"
+)
+labels_significance = c(
+  "***"= "Pr(>|t|)<0.001",
+  "**"="Pr(>|t|)<0.01",
+  "*"="Pr(>|t|)<0.5",
+  "•"="Pr(>|t|)<0.1",
+  " "="NS Pr(>|t|)>0.1"
+)
+ggdotchart(total_coeffs|>
+             mutate(Variable= labels_variable[Variable],
+                    Significance = labels_significance[Significance]
+                    ),x="Variable",y="Estimate", facet.by = "Topic", color = "Significance",
+           caption = )+
+  geom_errorbar(aes(ymin = err_min,ymax=err_max, color= Significance),width=0.075)+
+  theme_ready+
+  scale_color_prism("winter_bright")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  title(main = "Effets de l'idéologie sur la prévalence des topics")
+```
+
+
 ###### Test autour de supprimers les mots
 En supprimant tous les mots qui apparaissent dans le top 10 de tous les topics
 Topic 1 :
@@ -850,11 +899,11 @@ CTTRUE      -0.2053501 0.08595558 -2.389026 1.734332e-02
 ```{r}
 # Exécuter un test de permutation pour chaque sujet par rapport à la variable 'Idéologie'
 
-results <- permutationTest(formula = 1:num_topic ~ ED + FE + XD,
-                           stmobj = stm_lda,
-                           data = dfm@docvars,
-                           treatment = "ED"
-                                  )  # Nombre de permutations, à ajuster selon les besoins
+# results <- permutationTest(formula = 1:num_topic ~ ED + FE + XD,
+#                            stmobj = stm_lda,
+#                            data = dfm@docvars,
+#                            treatment = "ED"
+#                                   )  # Nombre de permutations, à ajuster selon les besoins
 
 ```
 
