@@ -51,6 +51,8 @@ theme_ready <- theme_pubclean()+
         axis.text = element_text(size = text_size),
         legend.title = element_text(size = text_size),
         legend.text = element_text(size = text_size-2))
+plot_height = 8
+plot_width = 12
 ```
 ```{r}
 ggprism::prism_colour_pal("winter_bright")(9)
@@ -556,7 +558,7 @@ formula = as.formula("~ ED + XD + CT")
 
 stm_data <- convert(dfm, to = "stm")
 
-stm_lda <- stm(dfm,
+stm_model <- stm(dfm,
                K=num_topic, 
                prevalence = formula, #+ factor(Asso),
                #content =~ Type_doc ,
@@ -568,22 +570,22 @@ stm_lda <- stm(dfm,
 ## Exploration topics
 
 ```{r}
-# toLDAvis(stm_lda, stm_data$documents,reorder.topics = FALSE)
+# toLDAvis(stm_model, stm_data$documents,reorder.topics = FALSE)
 
 ```
 ```{r}
-labelTopics(stm_lda)
+labelTopics(stm_model)
 
 ```
 ```{r}
-plot(stm_lda, type = "summary", labeltype = "prob")
+plot(stm_model, type = "summary", labeltype = "prob")
 # if(save_figure){
 #   png("../output/lda/label_prob.png")
 #   dev.off()
 # }
 ```
 ```{r}
-plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+plot(stm_model, type = "labels", labeltype = "prob", frexw=0.5)
 # if(save_figure){
 #   pdf("../output/lda/top20_prob.pdf")
 #   dev.off()
@@ -592,14 +594,14 @@ plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
 ```
 
 ```{r}
-plot(stm_lda, type = "summary", labeltype = "frex")
+plot(stm_model, type = "summary", labeltype = "frex")
 # if(save_figure){
 #   pdf("../output/lda/label_frex.pdf")
 #   dev.off()
 # }
 ```
 ```{r}
-plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
+plot(stm_model, type = "labels", labeltype = "frex", frexw=0.5)
 # if(save_figure){
 #   pdf("../output/lda/top20_frex.pdf")
 #   dev.off()
@@ -610,7 +612,7 @@ plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
 
 ## Figures
 ```{r}
-tidy_model <- tidy(stm_lda)
+tidy_model <- tidy(stm_model)
 
 figure_top20_prob<- tidy_model |>
     group_by(topic) |>
@@ -629,12 +631,13 @@ figure_top20_prob<- tidy_model |>
   theme_ready+
   theme(axis.text.y = element_text(size = 8))
 if(save_figure){
-  ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob)
+  ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob, height = plot_height, width = plot_height)
+  ggsave("../output/results/figure_top10_words.png", height = plot_height, width = plot_width)
 }
 figure_top20_prob
 ```
 ```{r}
-td_gamma <- tidy(stm_lda, matrix = "gamma")
+td_gamma <- tidy(stm_model, matrix = "gamma")
 
 prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
   geom_histogram(alpha = 0.8, show.legend = FALSE) +
@@ -650,27 +653,32 @@ if(save_figure){
 }
 prevalence_doc
 ```
+```{r}
+topicQuality(stm_model,documents = dfm)
+```
+
+
 #### Discussion topic enfance
 
 ```{r}
-plot(stm_lda, type = "perspectives", topics = c(1,6))
+plot(stm_model, type = "perspectives", topics = c(1,6))
 
 ```
 
 ```{r}
-plot(stm_lda, type = "perspectives", topics = c(1,3))
+plot(stm_model, type = "perspectives", topics = c(1,3))
 
 ```
 
 ```{r}
-plot(stm_lda, type = "perspectives", topics = c(3,6))
+plot(stm_model, type = "perspectives", topics = c(3,6))
 
 ```
 
 #### Discussion topic féministe
 
 ```{r}
-plot(stm_lda, type = "perspectives", topics = c(2,4))
+plot(stm_model, type = "perspectives", topics = c(2,4))
 
 ```
 ## Effet des métadonnées
@@ -678,7 +686,7 @@ plot(stm_lda, type = "perspectives", topics = c(2,4))
 ```{r}
 # Supposons que 'effets' est l'objet retourné par estimateEffect
 stm_effets <- estimateEffect(formula = 1:num_topic ~ ED + XD + CT, 
-                         stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
+                         stmobj = stm_model, metadata = stm_data$meta, uncertainty = "Global")
 
 # Extraction des résumés des effets pour chaque sujet
 summaries <- summary(stm_effets, topics = 1:num_topic)
@@ -737,14 +745,19 @@ labels_significance = c(
 )
 ggdotchart(total_coeffs|>
              mutate(Variable= labels_variable[Variable],
-                    Significance = labels_significance[Significance]
-                    ),x="Variable",y="Estimate", facet.by = "Topic", color = "Significance",
-           caption = )+
+                    Topic = paste("Topic",Topic),
+                    Significance = labels_significance[Significance],
+                    Significance = factor(Significance,levels = unname(labels_significance))
+                    ),x="Variable",y="Estimate", facet.by = "Topic", color = "Significance")+
+  labs(title ="Effets de l'idéologie sur la prévalence des topics",
+        caption="Les barres d'erreur représentent l'intervalle de confiance à 95%.\nLecture : les associations orientées éducation parlent plus fréquement du topic 1 par rapport aux associations féministes.")+
   geom_errorbar(aes(ymin = err_min,ymax=err_max, color= Significance),width=0.075)+
   theme_ready+
+  geom_hline(yintercept = 0, color = "red", linetype = "dotted", alpha = 0.75) +
   scale_color_prism("winter_bright")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
-  title(main = "Effets de l'idéologie sur la prévalence des topics")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+if(save_figure)
+  ggsave("../output/results/coefficient.png", height = plot_height, width = plot_width)
 ```
 
 
@@ -900,7 +913,7 @@ CTTRUE      -0.2053501 0.08595558 -2.389026 1.734332e-02
 # Exécuter un test de permutation pour chaque sujet par rapport à la variable 'Idéologie'
 
 # results <- permutationTest(formula = 1:num_topic ~ ED + FE + XD,
-#                            stmobj = stm_lda,
+#                            stmobj = stm_model,
 #                            data = dfm@docvars,
 #                            treatment = "ED"
 #                                   )  # Nombre de permutations, à ajuster selon les besoins
