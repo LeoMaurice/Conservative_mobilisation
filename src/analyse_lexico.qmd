@@ -148,7 +148,7 @@ cp <- corpus(filtered_data$text,
              docnames = filtered_data$ID)
 
 # too frequent words
-too_frequent_words <- c("femme","homme","personne","sexe","genre")
+too_frequent_words <- c("femme","homme","personne","sexe","genre","pouvoir") #c("femme","homme","personne","sexe","genre","pouvoir")
 # words to remove
 toremove <- readLines("../data/intermediate/words_to_filter.txt")
 toremove <- c(stopwords("en"),stopwords("fr"),toremove,
@@ -600,22 +600,14 @@ plot(stm_lda, type = "labels", labeltype = "frex", frexw=0.5)
 
 ```
 
-```{r}
-plot(stm_lda, type = "perspectives", topics = c(1,3))
 
-```
-
-```{r}
-corrmat <- topicCorr(stm_lda)
-plot(corrmat)
-```
 ## Figures
 ```{r}
 tidy_model <- tidy(stm_lda)
 
 figure_top20_prob<- tidy_model |>
     group_by(topic) |>
-    top_n(6, beta) |>
+    top_n(10, beta) |>
     ungroup() |>
     mutate(topic = paste0("Topic ", topic),
            term = reorder_within(term, beta, topic)) |>
@@ -651,7 +643,29 @@ if(save_figure){
 }
 prevalence_doc
 ```
+#### Discussion topic enfance
 
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(1,6))
+
+```
+
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(1,3))
+
+```
+
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(3,6))
+
+```
+
+#### Discussion topic féministe
+
+```{r}
+plot(stm_lda, type = "perspectives", topics = c(2,4))
+
+```
 ## Effet des métadonnées
 
 ```{r}
@@ -685,7 +699,154 @@ for (i in 1:num_topic) {
 }
 
 ```
+###### Test autour de supprimers les mots
+En supprimant tous les mots qui apparaissent dans le top 10 de tous les topics
+Topic 1 :
 
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.09171725 0.01533146 5.982292 4.789322e-09
+EDTRUE      0.43458344 0.04990492 8.708229 7.600577e-17
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.15688403 0.01579206  9.934361 5.493069e-21
+EDTRUE      -0.11880652 0.04809023 -2.470492 1.389764e-02
+XDTRUE      -0.07720757 0.04063789 -1.899891 5.814705e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.06952777 0.01300504 5.346218 1.492868e-07
+XDTRUE      0.45446604 0.04992009 9.103870 3.823674e-18
+CTTRUE      0.46919597 0.08605871 5.452045 8.607259e-08
+
+---
+Topic 4 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.20113020 0.01937686 10.379915 1.425560e-22
+EDTRUE      -0.18890172 0.05567056 -3.393207 7.578373e-04
+XDTRUE      -0.09957125 0.05145548 -1.935095 5.366437e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2738429 0.02036250 13.448393 2.011108e-34
+EDTRUE      -0.2503419 0.05735854 -4.364509 1.613787e-05
+XDTRUE      -0.1741412 0.04948181 -3.519298 4.810549e-04
+CTTRUE      -0.2468223 0.08697091 -2.837987 4.764872e-03
+
+---
+Topic 6 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.20670174 0.02017141 10.247263 4.268981e-22
+EDTRUE       0.12361651 0.06631405  1.864107 6.301938e-02
+XDTRUE      -0.09990002 0.05397964 -1.850698 6.493031e-02
+CTTRUE      -0.20640969 0.08654096 -2.385110 1.752643e-02
+
+---
+
+En gardant les mots qui sont trop fréquent :
+Topic 1 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.17939090 0.01866684  9.610140 7.374766e-20
+EDTRUE       0.49932676 0.06470663  7.716778 9.139078e-14
+XDTRUE      -0.08295998 0.04788736 -1.732398 8.395284e-02
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.12520912 0.01405864  8.906204 1.721322e-17
+EDTRUE      -0.08992251 0.04550458 -1.976120 4.880946e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.09841228 0.01395194 7.053662 7.436102e-12
+XDTRUE      0.35414312 0.04488771 7.889534 2.772821e-14
+CTTRUE      0.41068635 0.08331580 4.929273 1.199477e-06
+
+---
+Topic 4 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2405093 0.01884367 12.763399 1.171031e-31
+EDTRUE      -0.2263954 0.05282383 -4.285857 2.270024e-05
+XDTRUE      -0.1612950 0.04555491 -3.540672 4.447840e-04
+CTTRUE      -0.2085536 0.08191338 -2.546027 1.125975e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.1963049 0.01852431 10.597149 2.325229e-23
+EDTRUE      -0.1504834 0.05913314 -2.544824 1.129799e-02
+
+---
+Topic 6 :
+
+    Estimate   Std. Error      t value     Pr(>|t|) 
+1.600761e-01 1.585582e-02 1.009573e+01 1.479601e-21 
+
+---
+
+En supprimant les mots qui apparaissent partout, sauf pouvoir :
+Topic 1 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.08884062 0.01407916 6.310080 7.225762e-10
+EDTRUE      0.41146816 0.05168765 7.960667 1.687649e-14
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.15816513 0.01761471  8.979152 9.904115e-18
+EDTRUE      -0.09895402 0.05302319 -1.866241 6.271971e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.07497071 0.01407190 5.327690 1.642486e-07
+XDTRUE      0.45722775 0.04624124 9.887878 7.996546e-21
+CTTRUE      0.48751286 0.10327809 4.720390 3.233456e-06
+
+---
+Topic 4 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.1976286 0.01912103 10.335669 2.057097e-22
+EDTRUE      -0.1820252 0.05702272 -3.192152 1.520708e-03
+XDTRUE      -0.0993402 0.05016272 -1.980359 4.832961e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2750894 0.01983082 13.871809 3.688211e-36
+EDTRUE      -0.2498529 0.05792942 -4.313057 2.018541e-05
+XDTRUE      -0.1856643 0.05053215 -3.674182 2.701851e-04
+CTTRUE      -0.2296446 0.08815769 -2.604930 9.522640e-03
+
+---
+Topic 6 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2052072 0.01922372 10.674687 1.211105e-23
+EDTRUE       0.1369461 0.06673349  2.052134 4.078959e-02
+XDTRUE      -0.1018647 0.05110995 -1.993050 4.691667e-02
+CTTRUE      -0.2053501 0.08595558 -2.389026 1.734332e-02
+
+---
 ```{r}
 # Exécuter un test de permutation pour chaque sujet par rapport à la variable 'Idéologie'
 
