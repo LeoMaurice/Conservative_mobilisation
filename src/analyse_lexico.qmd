@@ -21,6 +21,7 @@ pacman::p_load(tidyverse,
                topicmodels,
                LDAvis,
                ldatuning,
+               lmtest,
                
                ggprism,
                ggpmisc,
@@ -135,8 +136,15 @@ count_keywords <- function(text, keywords) {
 filtered_data <- base_articles %>%
   filter(sapply(.$text, count_keywords, keywords) >= 1)
 
+# one hot encoder
+filtered_data <- filtered_data|>
+  mutate(ED = Idéologie=="ED",
+         FE = Idéologie=="FE",
+         XD = Idéologie=="XD",
+         CT = Idéologie=="CT")
+
 cp <- corpus(filtered_data$text, 
-             docvars = filtered_data |> select(Asso, Date, Type_doc, Idéologie,Droite) |> as.data.frame(), 
+             docvars = filtered_data |> select(Asso, Date, Type_doc,Idéologie, ED,FE,XD,CT,Droite) |> as.data.frame(), 
              docnames = filtered_data$ID)
 
 # too frequent words
@@ -204,7 +212,7 @@ hist_occurences_doc <- ggplot(occurence_asso, aes(x = Idéologie, y = Occurences
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Nombre de documents par idéologie",
        x = "Idéologie", y = "Occurences") +
-  theme_prism() +
+  theme_pubclean() +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
@@ -226,7 +234,7 @@ hist_asso_droite <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Droit
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Nombre de documents par Association",
        x = "Idéologie", y = "Occurences") +
-  theme_prism() +
+  theme_pubclean() +
   coord_flip()+
   scale_fill_manual(values = c("#FF0066","#000000"))
 
@@ -294,7 +302,7 @@ tidy_dfm|>
   theme(strip.text=element_text(size=11)) +
   labs(x = NULL, y = "tf-idf",
        title = "Top 10 mean TF-IDF par Idéologies")+
-  theme_prism()+
+  theme_pubclean()+
   scale_fill_manual(values = couleurs_ideologie)
   
 ```
@@ -320,7 +328,7 @@ tidy(dfm)|>
   theme(strip.text=element_text(size=11)) +
   labs(x = NULL, y = "tf-idf",
        title = "Top 10 TF-IDF par Idéologies")+
-  theme_prism()+
+  theme_pubclean()+
   scale_fill_manual(values = couleurs_ideologie)
   
 ```
@@ -353,7 +361,7 @@ hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéo
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Fréquence des mots clés par idéologie",
        x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_prism() +
+  theme_pubclean() +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
@@ -390,7 +398,7 @@ hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = I
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Occurences des mots du filtre par idéologie",
        x = "Mot clé", y = "Occurences moyenne par document") +
-  theme_prism() +
+  theme_pubclean() +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
   geom_hline(yintercept = 1, linetype = "dashed")+
@@ -425,7 +433,7 @@ df_freq <- df_keywords |>
 boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
   labs(title = "Fréquence des mots clés par idéologie",
        x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_prism() +
+  theme_pubclean() +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
@@ -494,7 +502,7 @@ custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = m
   geom_point() +
   facet_wrap(~category, ncol = 1) + # Separate plots for Minimize vs Maximize
   scale_color_prism(palette = "winter_bright") +
-  theme_prism() + # Use ggpubr theme
+  theme_pubclean() + # Use ggpubr theme
   labs(x = "number of topics", y = NULL, color = "metrics:",shape = "metrics:") +
   theme(legend.position = "right",
         legend.title = element_text(),
@@ -518,7 +526,7 @@ semcoh_exclu_plot<- map(diag$results, unlist) |>
   labs(y = "cohérence sémantique",x = "exclusivité")+
     geom_point() +
     geom_label() +
-  theme_prism()
+  theme_pubclean()
 if(save_figure){
   ggsave("../output/lda/semcoh_exlu.pdf",plot = semcoh_exclu_plot)
 }
@@ -528,10 +536,11 @@ semcoh_exclu_plot
 # STM
 ## Model
 ```{r}
-num_topic = 7
-formula = as.formula("~ Droite + factor(Idéologie)") 
+num_topic = 6
+#formula = as.formula("~ Droite + factor(Idéologie)") 
 #formula = as.formula("~ Droite") 
 #formula = as.formula("~ factor(Idéologie)") 
+formula = as.formula("~ ED + XD + CT")
 
 ```
 
@@ -543,7 +552,7 @@ stm_data <- convert(dfm, to = "stm")
 stm_lda <- stm(dfm,
                K=num_topic, 
                prevalence = formula, #+ factor(Asso),
-               #content =~ ,
+               #content =~ Type_doc ,
                init.type = "Spectral",
                seed = seed, 
                verbose = FALSE)
@@ -618,7 +627,7 @@ figure_top20_prob<- tidy_model |>
     labs(x = NULL, y = expression(beta),
          title = "Probabilités de mots les plus élevés pour chaque thème",
          subtitle = "Différents mots sont associés à différents sujets")+
-  theme_prism()+
+  theme_pubclean()+
   theme(axis.text.y = element_text(size = 8))
 if(save_figure){
   ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob)
@@ -634,7 +643,7 @@ prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
   labs(title = "Distribution des probabilités des documents pour chaque thème",
        subtitle = "Chaque thème est associé à quelques documents",
        y = "Nombre de document", x = expression(gamma))+
-  theme_prism()+
+  theme_pubclean()+
   theme(panel.grid.major.y = element_line(linewidth = 0.2,color = "grey"),
         panel.grid.minor.y = element_line(linewidth = 0.1,color = "grey"))
 if(save_figure){
@@ -643,20 +652,15 @@ if(save_figure){
 prevalence_doc
 ```
 
-```{r}
-plot(stm_lda, type = "hist")
-```
-
-
 ## Effet des métadonnées
 
 ```{r}
 # Supposons que 'effets' est l'objet retourné par estimateEffect
-effets <- estimateEffect(formula = 1:num_topic ~ Droite + factor(Idéologie), 
+stm_effets <- estimateEffect(formula = 1:num_topic ~ ED + XD + CT, 
                          stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
 
 # Extraction des résumés des effets pour chaque sujet
-summaries <- summary(effets, topics = 1:num_topic)
+summaries <- summary(stm_effets, topics = 1:num_topic)
 
 # Pour chaque sujet, filtrer et afficher uniquement les coefficients significatifs
 
@@ -682,4 +686,14 @@ for (i in 1:num_topic) {
 
 ```
 
+```{r}
+# Exécuter un test de permutation pour chaque sujet par rapport à la variable 'Idéologie'
+
+results <- permutationTest(formula = 1:num_topic ~ ED + FE + XD,
+                           stmobj = stm_lda,
+                           data = dfm@docvars,
+                           treatment = "ED"
+                                  )  # Nombre de permutations, à ajuster selon les besoins
+
+```
 
