@@ -253,6 +253,80 @@ if(save_figure){
 
 hist_asso_droite
 ```
+```{r}
+# Données de base
+occurence <- filtered_data %>%
+  group_by(Asso, Idéologie) %>%
+  summarise(Occurences = n()) %>%
+  ungroup() %>%
+  arrange(-Occurences)
+
+occurence$Asso <- reorder(occurence$Asso, occurence$Occurences)
+
+# Remplacement des abréviations par les noms complets dans la légende
+occurence$Idéologie <- recode(occurence$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+# Création du graphique
+hist_asso_ideologie <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de documents par Association",
+       x = "Association", y = "Occurences",
+       fill = "Idéologie") + # Nom de la légende
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + # Rotation des étiquettes de l'axe x
+  scale_fill_manual(values = couleurs_ideologie) + # Couleurs par idéologie
+  coord_flip() # Inversion des axes
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_asso_ideologie.pdf", plot = hist_asso_ideologie)
+}
+
+hist_asso_ideologie
+```
+
+```{r}
+# Compter le nombre de mots dans chaque texte
+filtered_data <- filtered_data %>%
+  mutate(Nombre_Mots = sapply(strsplit(as.character(text), "\\s+"), length))
+
+# Regrouper par association et idéologie et compter le nombre total de mots
+occurence <- filtered_data %>%
+  group_by(Asso, Idéologie) %>%
+  summarise(Total_Mots = sum(Nombre_Mots)) %>%
+  ungroup() %>%
+  arrange(-Total_Mots)
+
+occurence$Asso <- reorder(occurence$Asso, occurence$Total_Mots)
+
+# Remplacement des abréviations par les noms complets dans la légende
+occurence$Idéologie <- recode(occurence$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+# Créer l'histogramme vertical
+hist_asso_ideologie_mot <- ggplot(occurence, aes(x = Asso, y = Total_Mots, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de mots par Association",
+       x = "Association", y = "Nombre de mots") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + # Rotation des étiquettes de l'axe x
+  scale_fill_manual(values = couleurs_ideologie) +
+  coord_flip() # Inversion des axes
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_asso_ideologie_mot.pdf", plot = hist_asso_ideologie_mot)
+}
+
+hist_asso_ideologie_mot
+
+
+```
 
 ## Frequency
 
@@ -366,6 +440,13 @@ df_freq <- df_keywords |>
   summarise(across(keywords, mean, na.rm = TRUE)) |>
   pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
 hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Fréquence des mots clés par idéologie",
@@ -403,6 +484,13 @@ df_freq <- df_keywords |>
   summarise(across(keywords, mean, na.rm = TRUE)) |>
   pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
 hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Occurences des mots du filtre par idéologie",
@@ -438,6 +526,13 @@ df_freq <- df_keywords |>
   mutate(across(keywords,~ 1000 * .x / n_words))|>
   select(any_of(keywords),Idéologie)|>
   pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
+
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
 
 boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
   labs(title = "Fréquence des mots clés par idéologie",
