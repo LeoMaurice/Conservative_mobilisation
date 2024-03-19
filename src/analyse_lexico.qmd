@@ -534,10 +534,11 @@ df_freq$Idéologie <- recode(df_freq$Idéologie,
                                "ED" = "Education",
                                "FE" = "Féministe")
 
-boxplot_freq_keywords <- ggboxplot(data=df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
+boxplot_freq_keywords <- ggboxplot(data = df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
   labs(title = "Fréquence des mots clés par idéologie",
        x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
-  theme_ready +
+  theme_minimal() +
+  theme(text = element_text(size = 10))  +
   scale_fill_manual(values = couleurs_ideologie) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
