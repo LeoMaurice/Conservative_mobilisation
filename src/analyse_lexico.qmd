@@ -32,7 +32,10 @@ pacman::p_load(tidyverse,
                
                stringr,
                readr,
-               readxl
+               readxl,
+               
+               text2vec,
+               stringdist
             )
 
 couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
@@ -731,6 +734,29 @@ if(save_figure){
   ggsave("../output/results/figure_top10_words.png", height = plot_height, width = plot_width)
 }
 figure_top20_prob
+```
+```{r}
+# Extraire les proportions des topics pour chaque document
+doc_topics <- stm_model$theta
+
+# Convertir les proportions des topics en un data frame
+doc_topics <- as.data.frame(doc_topics)
+
+# Ajouter une colonne avec l'identifiant du document
+doc_topics$doc_id <- rownames(doc_topics)
+
+# Pour chaque topic, sélectionner les deux documents les plus représentatifs
+top_docs <- doc_topics %>%
+  gather(topic, proportion, -doc_id) %>%
+  group_by(topic) %>%
+  top_n(2, proportion) %>%
+  arrange(topic)
+
+#On veut voir le contenu à chaque fois 
+
+# Afficher les résultats
+print(top_docs)
+
 ```
 ```{r}
 td_gamma <- tidy(stm_model, matrix = "gamma")
