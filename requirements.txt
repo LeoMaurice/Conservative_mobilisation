@@ -1,0 +1,35 @@
+# Pour les requêtes HTTP
+requests
+
+# Pour le traitement de HTML/XML
+beautifulsoup4
+
+# Pour la manipulation de données tabulaires
+pandas
+numpy
+openpyxl
+
+# Pour le traitement des fichiers CSV
+csv
+
+# Pour le téléchargement de fichiers depuis internet
+urllib3
+
+# Pour la manipulation de graphes
+networkx
+
+# Pour la manipulation de structures de données
+collections
+
+# Pour la manipulation de fichiers PDF
+pyPDF2
+
+# Pour le traitement de texte
+nltk
+spacy
+
+# Pour la visualisation de la progression
+tqdm
+
+# Pour l'utilisation de Jupyter Notebook
+jupyter

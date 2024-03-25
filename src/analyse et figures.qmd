@@ -42,7 +42,6 @@ execute:
 editor: source
 ---
 
-
 ```{r}
 if (!require("pacman")) install.packages("pacman"); library(pacman)
 pacman::p_load(tidyverse,
@@ -81,7 +80,7 @@ couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
-save_figure = T
+save_figure = F
 
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
@@ -105,8 +104,8 @@ plot_height = 8
 plot_width = 12
 ```
 
-
 # Ouverture données
+
 ```{r}
 Base_de_données_anti_trans <- read_excel("../data/Base de données anti trans.xlsx", 
     col_types = c("text", "text", "skip", 
@@ -137,7 +136,6 @@ base_articles <- read_delim("../data/intermediate/base_lemmatized.csv",
 
 ```
 
-
 ```{r}
 base_articles$text = base_articles$text|>
   str_replace_all("\\s+", " ") |>
@@ -150,6 +148,7 @@ base_articles$text = base_articles$text|>
 ```
 
 ## tokenisation
+
 ```{r}
 keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuelles",
               "transgenre", "transgenres", "transidentité", "transsexualité", "transsexualités",
@@ -207,9 +206,10 @@ dfm <- dfm(tk) |>
   dfm_trim(min_termfreq = 5)
 ```
 
-# Stat desc 
+# Stat desc
 
 ## Nombre de documents, par association et idéologie
+
 ```{r}
 occurence <- filtered_data|>
   group_by(Asso,Idéologie)|>
@@ -283,7 +283,6 @@ hist_asso_ideologie_mot
 
 ```
 
-
 ## Mots les plus fréquents avant filtre
 
 ```{r}
@@ -302,18 +301,20 @@ most_frequent_words_plot
 ```
 
 ## wordcloud
+
 ```{r}
 #| eval: true
 #| output: true
 #| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
-wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
+textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
                    color = "#000080")
 
-wordcloud_plot
 ```
+
 ## Fréquence certains mots par idéologie
+
 ```{r}
 # Liste des mots clés
 keywords <- c("enfant", "corps", "religion", "lesbien","prostitution","transition","féministe")
@@ -458,7 +459,9 @@ custom_tp_nb_plot
 ```
 
 # STM
+
 ## Model
+
 ```{r}
 num_topic = 6
 ```
@@ -479,6 +482,7 @@ stm_model <- stm(dfm,
 ## Figures
 
 ### Top words by topic
+
 ```{r}
 tidy_model <- tidy(stm_model)
 
@@ -510,7 +514,9 @@ figure_top20_prob
 ```{r}
 td_gamma <- tidy(stm_model, matrix = "gamma")
 ```
+
 #### gamma par idéologie
+
 ```{r}
 expression_g <- expression(gamma)
 stm_data$meta <- stm_data$meta |> 
@@ -542,7 +548,6 @@ documents_gamma|>
   rstatix::anova_test(formula = gamma ~ Idéologie)
 ```
 
-
 ### Discussion topic enfance
 
 ```{r}
@@ -565,6 +570,7 @@ plot(stm_model, type = "perspectives", topics = c(3,6))
 plot(stm_model, type = "perspectives", topics = c(2,4))
 
 ```
+
 ## Effet des métadonnées
 
 ```{r}
@@ -610,7 +616,9 @@ for (i in 1:num_topic) {
 }
 
 ```
+
 #### figure
+
 ```{r}
 labels_variable = c(
   "(Intercept)"="Constante",

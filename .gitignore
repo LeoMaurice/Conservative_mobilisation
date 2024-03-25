@@ -10,3 +10,4 @@ src/analyse et figures_files/
 output/
 
 *.html
+*.rmarkdown
