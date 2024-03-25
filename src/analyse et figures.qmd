@@ -104,10 +104,6 @@ theme_ready <-
 plot_height = 8
 plot_width = 12
 ```
-```{r}
-ggprism::prism_colour_pal("winter_bright")(9)
-
-```
 
 
 # Ouverture données
