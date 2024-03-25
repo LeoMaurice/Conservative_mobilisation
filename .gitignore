@@ -3,8 +3,9 @@
 .RData
 .Ruserdata
 
-output/
-
 src/figures_files/
+src/analyse-et-figures_files/
+
+output/
 
 *.html
