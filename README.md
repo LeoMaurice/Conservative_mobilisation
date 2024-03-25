@@ -24,6 +24,8 @@ Il est impératif de mettre `save_figures = F` dans le premier bloc ou dans le c
 
 Les métadonnées et sites scrappés sont présentés dans le `/data/Base de données anti trans.xlsx`.
 
+Le code `/src/Scrapping_websites.ipynb` réalise les scrappings automatiques des sites avec beaucoup de documents à récupérer.
+
 Les données sont présentes dans le dossier /data. En son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (base manuel 2) et ceux récupérés par copié collé directement dans un fichier excel.
 
 Le code Merging permet de fusionner toutes les bases en `/data/intermediate/base_merged.csv`
