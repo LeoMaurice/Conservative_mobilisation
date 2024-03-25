@@ -10,55 +10,93 @@ pacman::p_load(tidyverse,
                lubridate,
                here,
                knitr,
+               
                quanteda,
                quanteda.textstats,
+               quanteda.textplots,
+
+               tidytext,
+                              
                stm,
                topicmodels,
                LDAvis,
                ldatuning,
-               readr,
-               quanteda.textplots,
+               lmtest,
+               
                ggprism,
                ggpmisc,
                RJSONIO,
                ggrepel,
                ggcorrplot,
-               pdftools,
-               #pdftk, pas dispo
-               #tabulizer,
-               tesseract,
+               ggpubr,
+               
                stringr,
-               openxlsx,
                readr,
-               readxl
+               readxl,
+               
+               text2vec,
+               stringdist
             )
+
+couleurs_ideologie <- ggprism::prism_colour_pal("colorblind_safe")(6)[-1]
 
 # Some little helps from the internet
 source("../src/helpers/lda_reports.R")
 
+save_figure = T
+
 seed = 24021956 # date de naissance de Butler
 set.seed(seed)
+text_size = 14
+theme_ready <- theme_pubclean()+
+    theme(text = element_text(size = text_size),
+        axis.title = element_text(size = text_size+2, face="bold"),
+        axis.text = element_text(size = text_size),
+        legend.title = element_text(size = text_size),
+        legend.text = element_text(size = text_size-2))
+plot_height = 8
+plot_width = 12
+```
+```{r}
+ggprism::prism_colour_pal("winter_bright")(9)
+
 ```
 
+
 # Ouverture données
+```{r}
+Base_de_données_anti_trans <- read_excel("../data/Base de données anti trans.xlsx", 
+    col_types = c("text", "text", "skip", 
+        "skip", "text","text", "skip", "skip", "skip"))|>
+  rename(ID_ASSO = Id,
+         Asso = nom,
+         Idéologie = Idéologie_simplifiée,
+         Droite = placement_droite)|>
+  mutate(Idéologie = as.factor(Idéologie),
+         Droite = Droite=="VRAI")
+```
 
 ```{r}
-# modifié ID, mettre les ID mis en place par Fynch
-Base_de_données_site_anti_trans <- read_excel("../Base de données site anti-trans.xlsx")|>
-  rename(ASSO = Id)
-
-base_articles <- read_delim("../data/base_def.tsv", 
-    delim = "\t", escape_double = FALSE, 
+base_articles <- read_delim("../data/intermediate/base_lemmatized.csv", 
+    delim = ";", escape_double = FALSE, col_types = cols(`ID ASSO` = col_character(), 
+        `ID ARTICLE` = col_character(), contenu = col_character(), 
+        `Type de document` = col_character(), 
+        Auteur = col_character(), Date = col_datetime(format = "%d/%m/%Y"), 
+        Titre = col_character(), URL = col_character(), 
+        lemmatized_contenu = col_character()), 
     trim_ws = TRUE)|>
-  rename(Texte = "contenu",
-         ID = "ID ARTICLE",
-         ASSO = "ID ASSO",
-         type_doc = "Type de document")|>
-  left_join(Base_de_données_site_anti_trans, by = "ASSO")|>
-  rename(type_asso = "Idéologie")
+  select(-URL)|>
+  rename(ID = "ID ARTICLE",
+         ID_ASSO = "ID ASSO",
+         text = "lemmatized_contenu",
+         Type_doc = "Type de document")|>
+  left_join(Base_de_données_anti_trans, by = "ID_ASSO")
+
+```
 
 
-base_articles$Texte = base_articles$Texte|>
+```{r}
+base_articles$text = base_articles$text|>
   str_replace_all("\\s+", " ") |>
   str_replace_all("[']", " ") |>
   str_replace_all("[’]", " ") |>
@@ -66,131 +104,248 @@ base_articles$Texte = base_articles$Texte|>
   str_replace_all("\r", " ") |>
   str_replace_all("\n", " ") |>
   str_replace_all("[,]",".")
+```
 
+```{r}
+base_articles$Asso|> table()
+```
+
+
+```{r}
+base_articles|>
+  group_by(ID_ASSO)|>
+  slice_sample(n = 1)|>
+  ungroup()
+
+```
+
+## tokenisation
+```{r}
 keywords <- c("trans", "transexuel", "transexuelle", "transexuels", "transexuelles",
               "transgenre", "transgenres", "transidentité", "transsexualité", "transsexualités",
               "transgender", "non-binaire", "non-binaires", "genderqueer", "intersexe", "intersexes",
               "queer", "affirmant le genre", "affirmant les genres", "transition de genre",
               "transitions de genre", "identité de genre", "identités de genre")
 
+
 # Construction d'une expression régulière à partir des mots-clés pour la recherche
 regex_keywords <- paste(keywords, collapse = "|")
 
-# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'Texte'
+# Filtrage des lignes du data.frame basé sur la présence d'au moins un mot-clé dans 'text'
+# filtered_data <- base_articles |>
+#   filter(grepl(regex_keywords, text, ignore.case = TRUE))
+
+# Function to count occurrences of keywords in a text
+count_keywords <- function(text, keywords) {
+  counts <- sapply(keywords, function(keyword) {
+    sum(grepl(keyword, text, ignore.case = TRUE))
+  })
+  total_count <- sum(counts)
+  return(total_count)
+}
+
+# Filter based on the count of occurrences of keywords
 filtered_data <- base_articles %>%
-  filter(grepl(regex_keywords, Texte, ignore.case = TRUE))
+  filter(sapply(.$text, count_keywords, keywords) >= 1)
 
-cp <- corpus(filtered_data$Texte, 
-             docvars = filtered_data |> select(ID,
-                                    ASSO, Date, type_doc, type_asso) |> as.data.frame(), 
+# one hot encoder
+filtered_data <- filtered_data|>
+  mutate(ED = Idéologie=="ED",
+         FE = Idéologie=="FE",
+         XD = Idéologie=="XD",
+         CT = Idéologie=="CT")
+
+cp <- corpus(filtered_data$text, 
+             docvars = filtered_data |> select(Asso, Date, Type_doc,Idéologie, ED,FE,XD,CT,Droite) |> as.data.frame(), 
              docnames = filtered_data$ID)
+
+# too frequent words
+too_frequent_words <- c("femme","homme","personne","sexe","genre","pouvoir") #c("femme","homme","personne","sexe","genre","pouvoir")
+# words to remove
+toremove <- readLines("../data/intermediate/words_to_filter.txt")
+toremove <- c(stopwords("en"),stopwords("fr"),toremove,
+              too_frequent_words)
+
 # tokenisation
-tk_original <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
-```
+tk <- tokens(cp, remove_punct = TRUE, remove_numbers = TRUE)
+tk <- tokens_remove(tk,toremove)
+tk <- tokens_replace(tk, pattern = "tran", replacement = "trans", valuetype = "fixed") # effect of spacy tokenization
 
-
-```{r}
-toremove <- c(stopwords("fr"), stopwords("en"),
-              "plus",
-              "comme",
-              "fait",
-              "ça",
-              "tout",
-              "avoir",
-              "très",
-              "si",
-              "alors",
-              "entre",
-              "donc",
-              "ans",
-              "peut",
-              "deux",
-              "elles",
-              "travail",
-              "parce",
-              "autres",
-              "faire",
-              "quand",
-              "car",
-              "temps",
-              "réalité",
-              "dit",
-              "dont",
-              "après",
-              "dire",
-              "fois",
-              "aussi",
-              "pouvez",
-              "ainsi",
-              "où",
-              "monde",
-              "plusieurs",
-              "article",
-              "chez",
-              "certaines",
-              "cas",
-              "vie",
-              "tous",
-              "souvent",
-              "toutes",
-              "bien",
-              "quelques",
-              "surpatreon",
-              "terme",
-              "pourquoi",
-              "également",
-              ">",
-              "autre",
-              "peuvent",
-              "sens",
-              "encore",
-              "faits",
-              "ensemble",
-              "toujours",
-              "question",
-              "non",
-              "afin",
-              "chose",
-              "depuis",
-              "commencé",
-              "co-fondatrice",
-              "beaucoup",
-              "parmarguerite",
-              "années",
-              "→",
-              "selon",
-              "this:twitterfacebookj",
-              "aimechargement",
-              "←",
-              "commentaireannuler",
-              "réponse.δce",
-              "akismet",
-              "indésirables.en")
-
-tk <- tokens_remove(tk_original,toremove)
-
-# DFM format
 dfm <- dfm(tk) |>
   dfm_remove(toremove) |>
   dfm_trim(min_termfreq = 5)
 ```
 
 ```{r}
-print(textstat_frequency(dfm, n=100))|> select(feature) |> kable()
+textstat_frequency(dfm, n=100)
 ```
 
+
 # Stat desc 
+
+## tableau d'occurences des associations et des idéologies
+
+```{r}
+# Calculer les nombres d'occurence
+occurence_asso <- table(filtered_data$Asso) |> 
+  as.data.frame() |>
+  rename(Association = Var1, Occurences = Freq) |>
+  arrange(desc(Occurences))
+
+latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des Associations")
+
+# Sauvegarder le tableau LaTeX dans un fichier
+if(save_figure){
+  writeLines(latex_table, "../output/descriptive/tableau_occurence_asso.tex")
+}
+
+kable(occurence_asso, format = "html", caption = "Occurences des Associations")
+```
+
+```{r}
+# Calculer les nombres d'occurence
+occurence_asso <- table(filtered_data$Idéologie) |> 
+  as.data.frame() |>
+  rename(Idéologie = Var1, Occurences = Freq) |>
+  arrange(desc(Occurences))
+
+latex_table <- kable(occurence_asso, format = "latex", caption = "Occurences des idéologies")
+
+# Sauvegarder le tableau LaTeX dans un fichier
+if(save_figure){
+  writeLines(latex_table, "../output/descriptive/tableau_occurence_idéo.tex")
+}
+
+kable(occurence_asso, format = "html", caption = "Occurences des Associations")
+```
+
+```{r}
+hist_occurences_doc <- ggplot(occurence_asso, aes(x = Idéologie, y = Occurences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de documents par idéologie",
+       x = "Idéologie", y = "Occurences") +
+  theme_ready +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_occurences_doc_ideologies.pdf", plot = hist_occurences_doc)
+}
+
+hist_occurences_doc
+
+```
+```{r}
+occurence <- filtered_data|>
+  group_by(Asso,Droite)|>
+  summarise(Occurences = n())|>
+  ungroup()|>
+  arrange(-Occurences)
+occurence$Asso <- reorder(occurence$Asso, occurence$Occurences)
+hist_asso_droite <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Droite)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de documents par Association",
+       x = "Idéologie", y = "Occurences") +
+  theme_ready +
+  coord_flip()+
+  scale_fill_manual(values = c("#FF0066","#000000"))
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_asso_droite.pdf", plot = hist_asso_droite)
+}
+
+hist_asso_droite
+```
+```{r}
+# Données de base
+occurence <- filtered_data %>%
+  group_by(Asso, Idéologie) %>%
+  summarise(Occurences = n()) %>%
+  ungroup() %>%
+  arrange(-Occurences)
+
+occurence$Asso <- reorder(occurence$Asso, occurence$Occurences)
+
+# Remplacement des abréviations par les noms complets dans la légende
+occurence$Idéologie <- recode(occurence$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+# Création du graphique
+hist_asso_ideologie <- ggplot(occurence, aes(x = Asso, y = Occurences, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de documents par Association",
+       x = "Association", y = "Occurences",
+       fill = "Idéologie") + # Nom de la légende
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + # Rotation des étiquettes de l'axe x
+  scale_fill_manual(values = couleurs_ideologie) + # Couleurs par idéologie
+  coord_flip() # Inversion des axes
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_asso_ideologie.pdf", plot = hist_asso_ideologie)
+}
+
+hist_asso_ideologie
+```
+
+```{r}
+# Compter le nombre de mots dans chaque texte
+filtered_data <- filtered_data %>%
+  mutate(Nombre_Mots = sapply(strsplit(as.character(text), "\\s+"), length))
+
+# Regrouper par association et idéologie et compter le nombre total de mots
+occurence <- filtered_data %>%
+  group_by(Asso, Idéologie) %>%
+  summarise(Total_Mots = sum(Nombre_Mots)) %>%
+  ungroup() %>%
+  arrange(-Total_Mots)
+
+occurence$Asso <- reorder(occurence$Asso, occurence$Total_Mots)
+
+# Remplacement des abréviations par les noms complets dans la légende
+occurence$Idéologie <- recode(occurence$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+# Créer l'histogramme vertical
+hist_asso_ideologie_mot <- ggplot(occurence, aes(x = Asso, y = Total_Mots, fill = Idéologie)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Nombre de mots par Association",
+       x = "Association", y = "Nombre de mots") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + # Rotation des étiquettes de l'axe x
+  scale_fill_manual(values = couleurs_ideologie) +
+  coord_flip() # Inversion des axes
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_asso_ideologie_mot.pdf", plot = hist_asso_ideologie_mot)
+}
+
+hist_asso_ideologie_mot
+
+
+```
 
 ## Frequency
 
 ```{r}
-dfm %>% 
-  textstat_frequency(n = 15) %>% 
+most_frequent_words_plot <- dfm |> 
+  textstat_frequency(n = 15) |> 
   ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
   geom_point() +
   coord_flip() +
-  labs(x = NULL, y = "Frequency") +
+  labs(x = NULL, y = "Occurences") +
   theme_minimal()
+
+if(save_figure){
+  ggsave("../output/descriptive/most_frequent_words.pdf", plot = most_frequent_words_plot)
+}
+most_frequent_words_plot
 ```
 
 
@@ -200,81 +355,202 @@ dfm %>%
 #| fig-cap: Mots les plus fréquents dans le corpus. La taille est proportionnelle à la fréquence.
 #| label: fig-wordcloud
 palette <-ggprism::prism_color_pal("winter_bright")(9)
-textplot_wordcloud(dfm, min_count = 100, random_order = FALSE, rotation = 0.25,
-                   color = palette)
-```
+wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
+                   color = "#000080")
+# if(save_figure){
+#   ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf", plot = wordcloud_plot)
+# }
 
-## Fréquence certains mots
+wordcloud_plot
+```
+## TF IDF
+
+```{r}
+tidy_dfm <- tidy(dfm)|>
+  bind_tf_idf(term,document,count)|>
+  rename(ID = document)|>
+  left_join(dfm@docvars|>
+             rename(ID = docid_)|>
+             select(ID,Idéologie), by = "ID")
+tidy_dfm|>
+  group_by(Idéologie,term)|>
+  summarise(tf_idf = mean(tf_idf))|>
+  arrange(-tf_idf)|>
+  group_by(Idéologie)|>
+  top_n(10)|>
+  ungroup()|>
+  mutate(term = reorder_within(term, tf_idf, Idéologie)) |>
+  ggplot(aes(term, tf_idf, fill = Idéologie)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ Idéologie, scales = "free", ncol = 2) +
+  scale_x_reordered() +
+  coord_flip() +
+  theme(strip.text=element_text(size=11)) +
+  labs(x = NULL, y = "tf-idf",
+       title = "Top 10 mean TF-IDF par Idéologies")+
+  theme_ready+
+  scale_fill_manual(values = couleurs_ideologie)
+  
+```
+```{r}
+tidy(dfm)|>
+  rename(ID = document)|>
+  left_join(dfm@docvars|>
+             rename(ID = docid_)|>
+             select(ID,Idéologie), by = "ID")|>
+  group_by(term,Idéologie,count)|>
+  summarise()|>
+  bind_tf_idf(term,Idéologie,count)|>
+  arrange(-tf_idf)|>
+  group_by(Idéologie)|>
+  top_n(10)|>
+  ungroup()|>
+  mutate(term = reorder_within(term, tf_idf, Idéologie)) |>
+  ggplot(aes(term, tf_idf, fill = Idéologie)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ Idéologie, scales = "free", ncol = 2) +
+  scale_x_reordered() +
+  coord_flip() +
+  theme(strip.text=element_text(size=11)) +
+  labs(x = NULL, y = "tf-idf",
+       title = "Top 10 TF-IDF par Idéologies")+
+  theme_ready+
+  scale_fill_manual(values = couleurs_ideologie)
+  
+```
+## Fréquence certains mots par idéologie
 ```{r}
 # Liste des mots clés
-keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+keywords <- c("enfant", "corps", "religion", "lesbien","prostitution","transition","féministe")
 
 # Filtrer le DFM pour ne garder que les mots clés
 dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
 
 # Convertir le DFM filtré en dataframe pour l'analyse
-df_keywords <- convert(dfm_keywords, to = "data.frame")
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
 
-# Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
-df_keywords$type_doc <- filtered_data$type_doc
+# # Ajouter la covariable 'type_doc' depuis votre dataframe 'data'
+# df_keywords$Idéologie <- filtered_data$Idéologie
 
-# Calculer la somme des fréquences pour chaque mot clé par type_doc
-df_freq <- df_keywords %>% 
-  group_by(type_doc) %>%
-  summarise(across(keywords, sum, na.rm = TRUE)) %>%
-  pivot_longer(-type_doc, names_to = "keyword", values_to = "frequency")
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ 1000 * .x / n_words))|>
+  group_by(Idéologie) |>
+  summarise(across(keywords, mean, na.rm = TRUE)) |>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
-# Créer le graphique avec ggplot2
-ggplot(df_freq, aes(x = keyword, y = frequency, fill = type_doc)) +
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Fréquence des mots clés par type de document",
-       x = "Mot clé", y = "Fréquence") +
-  scale_fill_brewer(palette = "Set3") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
+  theme_ready +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
 
+if(save_figure){
+  ggsave("../output/descriptive/hist_freq_keywords_ideologies.pdf", plot = hist_freq_keywords)
+}
+
+hist_freq_keywords
 ```
+
 ```{r}
-library(quanteda)
-library(dplyr)
-library(ggplot2)
-library(tidyr)
+keywords <- c("trans","transgenre", "transidentité","transgender", 
+              "queer")
 
-# Suppose 'dfm_corpus' is your Document-Feature Matrix and 'data' is your dataframe including the 'type_asso' variable
-data = filtered_data
-dfm_corpus = dfm
-# List of keywords
-keywords <- c("éducation", "famille", "enfant", "pornographie", "lesbiennes", "prostitution", "pouvoir")
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
 
-# Filter the DFM to keep only the keywords
-dfm_keywords <- dfm_select(dfm_corpus, pattern = keywords, selection = "keep")
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
 
-# Add the 'type_asso' covariate from your 'data' dataframe
-# Make sure the order of documents in 'data' corresponds to that in 'dfm_corpus'
-dfm_keywords$type_asso <- data$type_asso
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ .x))|>
+  group_by(Idéologie) |>
+  summarise(across(keywords, mean, na.rm = TRUE)) |>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
 
-# Convert the filtered DFM to a dataframe for analysis
-df_keywords <- convert(dfm_keywords, to = "data.frame")
-df_keywords$type_asso <- data$type_asso  # Make sure to add 'type_asso' correctly
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
 
-# Calculate the relative frequency of keywords by type_asso
-df_freq_rel <- df_keywords %>% 
-  group_by(type_asso) %>%
-  summarise(across(keywords, sum, na.rm = TRUE)) %>%
-  mutate(total_docs = n()) %>%
-  pivot_longer(-c(type_asso, total_docs), names_to = "keyword", values_to = "frequency") %>%
-  mutate(frequency_per_doc = frequency / total_docs)
-
-# Create the graph with ggplot2
-ggplot(df_freq_rel, aes(x = keyword, y = frequency_per_doc, fill = type_asso)) +
+hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéologie)) +
   geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Occurences des mots du filtre par idéologie",
+       x = "Mot clé", y = "Occurences moyenne par document") +
+  theme_ready +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_hline(yintercept = 1, linetype = "dashed")+
+  geom_hline(yintercept = 5, linetype = "dashed")+
+  geom_hline(yintercept = 3, linetype = "dashed")
+
+if(save_figure){
+  ggsave("../output/descriptive/hist_occurences_filtre.pdf", plot = hist_occurences_filtre)
+}
+hist_occurences_filtre
+```
+
+
+
+```{r}
+# Filtrer le DFM pour ne garder que les mots clés
+dfm_keywords <- dfm_select(dfm, pattern = keywords, selection = "keep")
+
+# Convertir le DFM filtré en dataframe pour l'analyse
+df_keywords <- convert(dfm_keywords, to = "data.frame")|>
+  rename(ID = doc_id)|>
+  left_join(filtered_data|>
+              mutate(n_words=nchar(text))|>
+              select(ID,n_words,Idéologie), by = "ID")
+
+# Calculer la moyenne des fréquences pour chaque mot clé par Idéologie
+df_freq <- df_keywords |> 
+  mutate(across(keywords,~ 1000 * .x / n_words))|>
+  select(any_of(keywords),Idéologie)|>
+  pivot_longer(-Idéologie, names_to = "Mot", values_to = "Fréquences")
+
+# Remplacement des abréviations par les noms complets dans la légende
+df_freq$Idéologie <- recode(df_freq$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
+
+boxplot_freq_keywords <- ggboxplot(data = df_freq, x = "Mot", y = "Fréquences", facet.by = "Idéologie", fill = "Idéologie") +
+  labs(title = "Fréquence des mots clés par idéologie",
+       x = "Mot clé", y = "Fréquence moyenne par document (‰)") +
   theme_minimal() +
-  labs(title = "Relative Frequency of Keywords by Association Type",
-       x = "Keyword", y = "Frequency per Document") +
-  scale_fill_brewer(palette = "Set3") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(text = element_text(size = 10))  +
+  scale_fill_manual(values = couleurs_ideologie) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  
 
+if(save_figure){
+  ggsave("../output/descriptive/boxplot_freq_keywords.pdf", plot = boxplot_freq_keywords)
+}
 
+boxplot_freq_keywords
 ```
 
 
@@ -288,7 +564,7 @@ stm_data <- convert(dfm, to = "stm")
 
 
 if(recompute_choix_K){
-  list_nb_topics_K <- seq(5, 20, 2)
+  list_nb_topics_K <- seq(2, 40, 2)
 
   tp_nb <- FindTopicsNumber(tm_data, topics = list_nb_topics_K, 
                           metrics = c("Griffiths2004", "CaoJuan2009", 
@@ -298,9 +574,9 @@ if(recompute_choix_K){
   diag <- searchK(stm_data$documents, stm_data$vocab, 
                   list_nb_topics_K, 
                   verbose=FALSE)
-  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240206_metrics.RData")
+  save(tp_nb,list_nb_topics_K,diag, file = "../data/results/LDA_report_20240222_metrics_40.RData")
 } else{
-  load("../data/results/LDA_report_20240206_metrics.RData")
+  load("../data/results/LDA_report_20240222_metrics.RData")
 }
 
 ```
@@ -314,28 +590,66 @@ if(recompute_choix_K){
 #| fig-subcap: Commenter métriques/résultats
 #| label: fig-lda-metrics
 
-FindTopicsNumber_plot(tp_nb)+
-  theme_prism()+
-  scale_colour_prism("winter_bright")
-  
+FindTopicsNumber_plot(tp_nb)
+
 ```
+
+```{r}
+tp_nb_custom <- tp_nb|>
+  pivot_longer(cols=c("Griffiths2004","CaoJuan2009","Arun2010","Deveaud2014"), names_to = "metricsType",values_to = "metrics")|>
+  mutate(category = ifelse(metricsType %in% c("Arun2010","CaoJuan2009"),"minimize","maximize"))|>
+  group_by(metricsType)|>
+  mutate(max = max(metrics),
+         min = min(metrics))|>
+  mutate(metrics = (metrics-min)/(max-min))|>
+  ungroup()
+  
+
+custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = metricsType, group = metricsType, shape = metricsType)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~category, ncol = 1) + # Separate plots for Minimize vs Maximize
+  scale_color_prism(palette = "winter_bright") +
+  theme_ready + # Use ggpubr theme
+  labs(x = "number of topics", y = NULL, color = "metrics:",shape = "metrics:") +
+  theme(legend.position = "right",
+        legend.title = element_text(),
+        panel.grid.major.x = element_line(linewidth = 0.2,color = "grey"),
+        panel.grid.minor.x = element_line(linewidth = 0.1,color = "grey"))
+if(save_figure){
+  ggsave("../output/lda/find_topic_number_metrics.pdf",plot = custom_tp_nb_plot)
+}
+custom_tp_nb_plot
+```
+
 ## Exclusivité et cohérence sémantique
 ```{r}
 #| eval: true
 #| output: true
 #| fig-cap: Cohérence sémantique et excluvité en fonction du nombre de topics
 #| label: fig-lda-exclu_cohsem
-map(diag$results, unlist) |> 
+semcoh_exclu_plot<- map(diag$results, unlist) |> 
   bind_cols() |> 
   ggplot(aes(exclus, semcoh, label = K)) +
+  labs(y = "cohérence sémantique",x = "exclusivité")+
     geom_point() +
     geom_label() +
-  theme_prism()
+  theme_ready
+if(save_figure){
+  ggsave("../output/lda/semcoh_exlu.pdf",plot = semcoh_exclu_plot)
+}
+semcoh_exclu_plot
 ```
 
 # STM
+## Model
 ```{r}
-num_topic = 11
+num_topic = 6
+#formula = as.formula("~ Droite + factor(Idéologie)") 
+#formula = as.formula("~ Droite") 
+#formula = as.formula("~ factor(Idéologie)") 
+formula = as.formula("~ ED + XD + CT")
+
 ```
 
 ```{r}
@@ -343,56 +657,161 @@ num_topic = 11
 
 stm_data <- convert(dfm, to = "stm")
 
-stm_lda <- stm(dfm,
+stm_model <- stm(dfm,
                K=num_topic, 
-               prevalence =~factor(type_doc) + factor(type_asso) ,
-               #content =~ ,
+               prevalence = formula, #+ factor(Asso),
+               #content =~ Type_doc ,
                init.type = "Spectral",
                seed = seed, 
                verbose = FALSE)
 ```
 
+## Exploration topics
+
 ```{r}
-toLDAvis(stm_lda, stm_data$documents,reorder.topics = FALSE)
+# toLDAvis(stm_model, stm_data$documents,reorder.topics = FALSE)
 
 ```
 ```{r}
-labelTopics(stm_lda)
+labelTopics(stm_model)
 
 ```
 ```{r}
-plot(stm_lda, type = "summary", labeltype = "prob")
+plot(stm_model, type = "summary", labeltype = "prob")
+# if(save_figure){
+#   png("../output/lda/label_prob.png")
+#   dev.off()
+# }
+```
+```{r}
+plot(stm_model, type = "labels", labeltype = "prob", frexw=0.5)
+# if(save_figure){
+#   pdf("../output/lda/top20_prob.pdf")
+#   dev.off()
+# }
+
+```
+
+```{r}
+plot(stm_model, type = "summary", labeltype = "frex")
+# if(save_figure){
+#   pdf("../output/lda/label_frex.pdf")
+#   dev.off()
+# }
+```
+```{r}
+plot(stm_model, type = "labels", labeltype = "frex", frexw=0.5)
+# if(save_figure){
+#   pdf("../output/lda/top20_frex.pdf")
+#   dev.off()
+# }
+
+```
+
+
+## Figures
+```{r}
+tidy_model <- tidy(stm_model)
+
+figure_top20_prob<- tidy_model |>
+    group_by(topic) |>
+    top_n(10, beta) |>
+    ungroup() |>
+    mutate(topic = paste0("Topic ", topic),
+           term = reorder_within(term, beta, topic)) |>
+    ggplot(aes(term, beta, fill = as.factor(topic))) +
+    geom_col(alpha = 0.8, show.legend = FALSE) +
+    facet_wrap(~ topic, scales = "free_y") +
+    coord_flip() +
+    scale_x_reordered() +
+    labs(x = NULL, y = expression(beta),
+         title = "Probabilités de mots les plus élevés pour chaque thème",
+         subtitle = "Différents mots sont associés à différents sujets")+
+  theme_ready+
+  theme(axis.text.y = element_text(size = 8))
+if(save_figure){
+  ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob, height = plot_height, width = plot_height)
+  ggsave("../output/results/figure_top10_words.png", height = plot_height, width = plot_width)
+}
+figure_top20_prob
+```
+```{r}
+# Extraire les proportions des topics pour chaque document
+doc_topics <- stm_model$theta
+
+# Convertir les proportions des topics en un data frame
+doc_topics <- as.data.frame(doc_topics)
+
+# Ajouter une colonne avec l'identifiant du document
+doc_topics$doc_id <- rownames(doc_topics)
+
+# Pour chaque topic, sélectionner les deux documents les plus représentatifs
+top_docs <- doc_topics %>%
+  gather(topic, proportion, -doc_id) %>%
+  group_by(topic) %>%
+  top_n(2, proportion) %>%
+  arrange(topic)
+
+#On veut voir le contenu à chaque fois 
+
+# Afficher les résultats
+print(top_docs)
 
 ```
 ```{r}
-plot(stm_lda, type = "labels", labeltype = "prob", frexw=0.5)
+td_gamma <- tidy(stm_model, matrix = "gamma")
+
+prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
+  geom_histogram(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~ topic, ncol = 3) +
+  labs(title = "Distribution des probabilités des documents pour chaque thème",
+       subtitle = "Chaque thème est associé à quelques documents",
+       y = "Nombre de document", x = expression(gamma))+
+  theme_ready+
+  theme(panel.grid.major.y = element_line(linewidth = 0.2,color = "grey"),
+        panel.grid.minor.y = element_line(linewidth = 0.1,color = "grey"))
+if(save_figure){
+  ggsave("../output/lda/prevalence_doc.pdf",plot = prevalence_doc)
+}
+prevalence_doc
 ```
 ```{r}
-plot(stm_lda, type = "perspectives", topics = c(4,3))
+topicQuality(stm_model,documents = dfm)
+```
+
+
+#### Discussion topic enfance
+
+```{r}
+plot(stm_model, type = "perspectives", topics = c(1,6))
 
 ```
 
 ```{r}
-corrmat <- topicCorr(stm_lda)
-plot(corrmat)
+plot(stm_model, type = "perspectives", topics = c(1,3))
+
+```
+
+```{r}
+plot(stm_model, type = "perspectives", topics = c(3,6))
+
+```
+
+#### Discussion topic féministe
+
+```{r}
+plot(stm_model, type = "perspectives", topics = c(2,4))
+
 ```
 ## Effet des métadonnées
 
 ```{r}
-#| eval: true
-stm_lda.effect <- estimateEffect(formula = 1:num_topic ~ factor(ASSO) + factor(type_doc), stmobj = stm_lda, metadata = stm_data$meta, uncertainty="Global")
-```
-```{r}
-summary_stm_main_effects
-```
-
-```{r}
 # Supposons que 'effets' est l'objet retourné par estimateEffect
-effets <- estimateEffect(formula = 1:num_topic ~ factor(type_asso) + factor(type_doc), 
-                         stmobj = stm_lda, metadata = stm_data$meta, uncertainty = "Global")
+stm_effets <- estimateEffect(formula = 1:num_topic ~ ED + XD + CT, 
+                         stmobj = stm_model, metadata = stm_data$meta, uncertainty = "Global")
 
 # Extraction des résumés des effets pour chaque sujet
-summaries <- summary(effets, topics = 1:num_topic)
+summaries <- summary(stm_effets, topics = 1:num_topic)
 
 # Pour chaque sujet, filtrer et afficher uniquement les coefficients significatifs
 
@@ -401,20 +820,225 @@ for (i in 1:num_topic) {
   cat("Topic", i, ":\n\n")
   
   # Extrait les coefficients et p-valeurs pour le sujet courant
-  coeffs <- summaries$tables[[i]]
+  coeffs <- as.data.frame(summaries$tables[[i]])|>
+    mutate(Significance = ifelse(`Pr(>|t|)` <= 0.001, "***", 
+                                ifelse(`Pr(>|t|)` <= 0.01, "**",
+                                ifelse(`Pr(>|t|)` <= 0.05, "*", 
+                                ifelse(`Pr(>|t|)` <= 0.1, "•"," ")))),
+           Topic = i,
+           err_min = Estimate- 1.96*`Std. Error`,
+           err_max = Estimate+ 1.96*`Std. Error`)
+  coeffs$Variable <- rownames(coeffs)
   
   # Filtrer pour garder uniquement les coefficients significatifs
-  significant_coeffs <- coeffs[coeffs[, "Pr(>|t|)"] <= 0.05, ]
-  
+  significant_coeffs <- coeffs|>
+    filter(`Pr(>|t|)`<=0.1)
+  if(i==1)
+    total_coeffs <- coeffs
+  else
+    total_coeffs <- rbind(total_coeffs,coeffs)
   # Si aucun coefficient significatif, afficher un message
   if (length(significant_coeffs) == 0) {
     cat("No significant coefficients for this topic.\n\n")
   } else {
-    print(significant_coeffs)
+    print(list(significant_coeffs|>
+                 select(Estimate,`Std. Error`, `Pr(>|t|)`, Significance))[1])
   }
   
   cat("\n---\n")
 }
+
+```
+
+```{r}
+labels_variable = c(
+  "(Intercept)"="Constante",
+  "CTTRUE"="Catholique",
+  "EDTRUE"="Education",
+  "XDTRUE"="Extrême-droite",
+  "FETRUE"="Féministe"
+)
+labels_significance = c(
+  "***"= "Pr(>|t|)<0.001",
+  "**"="Pr(>|t|)<0.01",
+  "*"="Pr(>|t|)<0.5",
+  "•"="Pr(>|t|)<0.1",
+  " "="NS Pr(>|t|)>0.1"
+)
+ggdotchart(total_coeffs|>
+             mutate(Variable= labels_variable[Variable],
+                    Topic = paste("Topic",Topic),
+                    Significance = labels_significance[Significance],
+                    Significance = factor(Significance,levels = unname(labels_significance))
+                    ),x="Variable",y="Estimate", facet.by = "Topic", color = "Significance")+
+  labs(title ="Effets de l'idéologie sur la prévalence des topics",
+        caption="Les barres d'erreur représentent l'intervalle de confiance à 95%.\nLecture : les associations orientées éducation parlent plus fréquement du topic 1 par rapport aux associations féministes.")+
+  geom_errorbar(aes(ymin = err_min,ymax=err_max, color= Significance),width=0.075)+
+  theme_ready+
+  geom_hline(yintercept = 0, color = "red", linetype = "dotted", alpha = 0.75) +
+  scale_color_prism("winter_bright")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+if(save_figure)
+  ggsave("../output/results/coefficient.png", height = plot_height, width = plot_width)
+```
+
+
+###### Test autour de supprimers les mots
+En supprimant tous les mots qui apparaissent dans le top 10 de tous les topics
+Topic 1 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.09171725 0.01533146 5.982292 4.789322e-09
+EDTRUE      0.43458344 0.04990492 8.708229 7.600577e-17
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.15688403 0.01579206  9.934361 5.493069e-21
+EDTRUE      -0.11880652 0.04809023 -2.470492 1.389764e-02
+XDTRUE      -0.07720757 0.04063789 -1.899891 5.814705e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.06952777 0.01300504 5.346218 1.492868e-07
+XDTRUE      0.45446604 0.04992009 9.103870 3.823674e-18
+CTTRUE      0.46919597 0.08605871 5.452045 8.607259e-08
+
+---
+Topic 4 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.20113020 0.01937686 10.379915 1.425560e-22
+EDTRUE      -0.18890172 0.05567056 -3.393207 7.578373e-04
+XDTRUE      -0.09957125 0.05145548 -1.935095 5.366437e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2738429 0.02036250 13.448393 2.011108e-34
+EDTRUE      -0.2503419 0.05735854 -4.364509 1.613787e-05
+XDTRUE      -0.1741412 0.04948181 -3.519298 4.810549e-04
+CTTRUE      -0.2468223 0.08697091 -2.837987 4.764872e-03
+
+---
+Topic 6 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.20670174 0.02017141 10.247263 4.268981e-22
+EDTRUE       0.12361651 0.06631405  1.864107 6.301938e-02
+XDTRUE      -0.09990002 0.05397964 -1.850698 6.493031e-02
+CTTRUE      -0.20640969 0.08654096 -2.385110 1.752643e-02
+
+---
+
+En gardant les mots qui sont trop fréquent :
+Topic 1 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.17939090 0.01866684  9.610140 7.374766e-20
+EDTRUE       0.49932676 0.06470663  7.716778 9.139078e-14
+XDTRUE      -0.08295998 0.04788736 -1.732398 8.395284e-02
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.12520912 0.01405864  8.906204 1.721322e-17
+EDTRUE      -0.08992251 0.04550458 -1.976120 4.880946e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.09841228 0.01395194 7.053662 7.436102e-12
+XDTRUE      0.35414312 0.04488771 7.889534 2.772821e-14
+CTTRUE      0.41068635 0.08331580 4.929273 1.199477e-06
+
+---
+Topic 4 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2405093 0.01884367 12.763399 1.171031e-31
+EDTRUE      -0.2263954 0.05282383 -4.285857 2.270024e-05
+XDTRUE      -0.1612950 0.04555491 -3.540672 4.447840e-04
+CTTRUE      -0.2085536 0.08191338 -2.546027 1.125975e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.1963049 0.01852431 10.597149 2.325229e-23
+EDTRUE      -0.1504834 0.05913314 -2.544824 1.129799e-02
+
+---
+Topic 6 :
+
+    Estimate   Std. Error      t value     Pr(>|t|) 
+1.600761e-01 1.585582e-02 1.009573e+01 1.479601e-21 
+
+---
+
+En supprimant les mots qui apparaissent partout, sauf pouvoir :
+Topic 1 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.08884062 0.01407916 6.310080 7.225762e-10
+EDTRUE      0.41146816 0.05168765 7.960667 1.687649e-14
+
+---
+Topic 2 :
+
+               Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.15816513 0.01761471  8.979152 9.904115e-18
+EDTRUE      -0.09895402 0.05302319 -1.866241 6.271971e-02
+
+---
+Topic 3 :
+
+              Estimate Std. Error  t value     Pr(>|t|)
+(Intercept) 0.07497071 0.01407190 5.327690 1.642486e-07
+XDTRUE      0.45722775 0.04624124 9.887878 7.996546e-21
+CTTRUE      0.48751286 0.10327809 4.720390 3.233456e-06
+
+---
+Topic 4 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.1976286 0.01912103 10.335669 2.057097e-22
+EDTRUE      -0.1820252 0.05702272 -3.192152 1.520708e-03
+XDTRUE      -0.0993402 0.05016272 -1.980359 4.832961e-02
+
+---
+Topic 5 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2750894 0.01983082 13.871809 3.688211e-36
+EDTRUE      -0.2498529 0.05792942 -4.313057 2.018541e-05
+XDTRUE      -0.1856643 0.05053215 -3.674182 2.701851e-04
+CTTRUE      -0.2296446 0.08815769 -2.604930 9.522640e-03
+
+---
+Topic 6 :
+
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept)  0.2052072 0.01922372 10.674687 1.211105e-23
+EDTRUE       0.1369461 0.06673349  2.052134 4.078959e-02
+XDTRUE      -0.1018647 0.05110995 -1.993050 4.691667e-02
+CTTRUE      -0.2053501 0.08595558 -2.389026 1.734332e-02
+
+---
+```{r}
+# Exécuter un test de permutation pour chaque sujet par rapport à la variable 'Idéologie'
+
+# results <- permutationTest(formula = 1:num_topic ~ ED + FE + XD,
+#                            stmobj = stm_model,
+#                            data = dfm@docvars,
+#                            treatment = "ED"
+#                                   )  # Nombre de permutations, à ajuster selon les besoins
 
 ```
 

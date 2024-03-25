@@ -300,7 +300,6 @@ most_frequent_words_plot <- dfm |>
   theme_minimal()
 
 if(save_figure){
-  ggsave("../output/descriptive/most_frequent_words.pdf", plot = most_frequent_words_plot)
   ggsave("../output/results/most_frequent_words.png", height = plot_height, width = plot_width)
 }
 most_frequent_words_plot
@@ -315,9 +314,6 @@ most_frequent_words_plot
 palette <-ggprism::prism_color_pal("winter_bright")(9)
 wordcloud_plot <- textplot_wordcloud(dfm, min_count = 500, random_order = FALSE, rotation = 0.25,
                    color = "#000080")
-# if(save_figure){
-#   ggsave("../output/descriptive/wordcloud_most_frequent_words.pdf", plot = wordcloud_plot)
-# }
 
 wordcloud_plot
 ```
@@ -361,7 +357,6 @@ hist_freq_keywords <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = Idéo
   
 
 if(save_figure){
-  ggsave("../output/descriptive/hist_freq_keywords_ideologies.pdf", plot = hist_freq_keywords)
   ggsave("../output/results/hist_freq_keywords_ideologies.png", height = plot_height, width = plot_width)
 }
 
@@ -406,7 +401,6 @@ hist_occurences_filtre <- ggplot(df_freq, aes(x = Mot, y = Fréquences, fill = I
   guides(fill = guide_legend(nrow = 2, title.position = "top", title.hjust = 0.5, wrap = TRUE))
 
 if(save_figure){
-  ggsave("../output/descriptive/hist_occurences_filtre.pdf", plot = hist_occurences_filtre)
   ggsave("../output/results/hist_occurences_filtre.png", height = plot_height, width = plot_width)
 }
 hist_occurences_filtre
@@ -462,7 +456,6 @@ custom_tp_nb_plot <- ggplot(tp_nb_custom, aes(x = topics, y = metrics, color = m
         panel.grid.major.x = element_line(linewidth = 0.2,color = "grey"),
         panel.grid.minor.x = element_line(linewidth = 0.1,color = "grey"))
 if(save_figure){
-  ggsave("../output/lda/find_topic_number_metrics.pdf",plot = custom_tp_nb_plot)
   ggsave("../output/results/find_topic_number_metrics.png", height = plot_height, width = plot_width)
 }
 custom_tp_nb_plot
@@ -471,12 +464,7 @@ custom_tp_nb_plot
 # STM
 ## Model
 ```{r}
-num_topic = 7
-#formula = as.formula("~ Droite + factor(Idéologie)") 
-#formula = as.formula("~ Droite") 
-formula = as.formula("~ factor(Idéologie)") 
-#formula = as.formula("~ ED + XD + CT")
-
+num_topic = 6
 ```
 
 ```{r}
@@ -486,8 +474,7 @@ stm_data <- convert(dfm, to = "stm")
 
 stm_model <- stm(dfm,
                K=num_topic, 
-               prevalence = formula, #+ factor(Asso),
-               #content = ~Droite ,
+               prevalence = ~ factor(Idéologie),
                init.type = "Spectral",
                seed = seed, 
                verbose = FALSE)
@@ -515,7 +502,6 @@ figure_top20_prob<- tidy_model |>
          subtitle = "Différents mots sont associés à différents sujets")+
   theme_ready(text_size = 17, flip = T)
 if(save_figure){
-  ggsave("../output/lda/figure_top20_words.pdf",plot =figure_top20_prob, height = plot_height, width = plot_height)
   ggsave("../output/results/figure_top10_words.png", height = plot_height, width = plot_width)
 }
 figure_top20_prob
@@ -527,20 +513,6 @@ figure_top20_prob
 
 ```{r}
 td_gamma <- tidy(stm_model, matrix = "gamma")
-
-prevalence_doc<-ggplot(td_gamma, aes(gamma, fill = as.factor(topic))) +
-  geom_histogram(alpha = 0.8, show.legend = FALSE) +
-  facet_wrap(~ topic, ncol = 2) +
-  labs(title = "Distribution des probabilités des documents pour chaque thème",
-       subtitle = "Chaque thème est associé à quelques documents",
-       y = "Nombre de document", x = expression(gamma))+
-  theme_ready()+
-  theme(panel.grid.major.y = element_line(linewidth = 0.2,color = "grey"),
-        panel.grid.minor.y = element_line(linewidth = 0.1,color = "grey"))
-if(save_figure){
-  ggsave("../output/lda/prevalence_doc.pdf",plot = prevalence_doc)
-}
-prevalence_doc
 ```
 #### gamma par idéologie
 ```{r}
@@ -551,7 +523,11 @@ stm_data$meta <- stm_data$meta |>
 documents_gamma <- td_gamma|>
   mutate(topic = paste("topic",topic))|>
   left_join(stm_data$meta, by = "document")
-
+documents_gamma$Idéologie <- recode(documents_gamma$Idéologie, 
+                               "CT" = "Catholique-Traditionaliste",
+                               "XD" = "Extrême-Droite",
+                               "ED" = "Education",
+                               "FE" = "Féministe")
 documents_gamma|>
   ggpubr::ggboxplot(x="Idéologie", y="gamma",facet.by = "topic",fill = "Idéologie", ncol=2)+
   labs(y = expression(gamma))+
@@ -567,8 +543,7 @@ if(save_figure)
 ```{r}
 documents_gamma|>
   group_by(topic)|>
-  rstatix::anova_test(formula = gamma ~ Idéologie)|>
-  xtable()
+  rstatix::anova_test(formula = gamma ~ Idéologie)
 ```
 
 
@@ -597,7 +572,6 @@ plot(stm_model, type = "perspectives", topics = c(2,4))
 ## Effet des métadonnées
 
 ```{r}
-# Supposons que 'effets' est l'objet retourné par estimateEffect
 stm_effets <- estimateEffect(formula = 1:num_topic ~ factor(Idéologie), 
                          stmobj = stm_model, metadata = stm_data$meta, uncertainty = "Global")
 
