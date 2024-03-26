@@ -26,7 +26,9 @@ Les métadonnées et sites scrappés sont présentés dans le `/data/Base de don
 
 Les données sont présentes dans le dossier `/data`. 
 
-En son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (stocké dans `/data/pdf`, mise en base sous le nom de `manuel2.tsv`, avec un jupyter notebook associé `src/Creation base manuelle 2.ipynb`) et ceux récupérés par copié collé directement dans un fichier excel.
+n son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (stocké dans `/data/pdf`, mise en base sous le nom de `manuel2.tsv`, avec un jupyter notebook associé `src/Creation base manuelle 2.ipynb`) et ceux récupérés par copié collé directement dans un fichier excel nommé manuel. Chaque site scrappé automatique est représenté par un `.tsv` créé par le code `/src/scrapping_websites.ipynb`. Ce code étant long, il parait donc être déconseillé de le faire tourner si on veut voir les résultats.
+
+Les bases intermédiaires servant à d'autres étapes dans le processus sont mise dans `/data/intermediate`.
 
 Les bases intermédiaires servant à d'autres étapes dans le processus sont mise dans `/data/intermediate`.
 
