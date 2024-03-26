@@ -6,31 +6,33 @@ Ce github nécessite [python (version 3.9 de préférence)](https://www.python.o
 Il est possible d'installer l'ensemble des libraires python nécessaires avec : 
 ```pip install -r requirements.txt```
 
-L'ensemble des librairies R devrait s'installer dans le premier bloc du code .qdm
+L'ensemble des librairies R devrait s'installer dans le premier bloc du code de `/src/analyse et figures.qmd`.
 
 # Explications d'utilisation des codes.
 
 ## Analyse
 
-L'analyse est entièrement réalisée R dans le fichier `/src/analyse et figures.qmd` qui peut être facilement lu sur RStudio.
+Les analyses sont entièrement réalisées en R dans le fichier `/src/analyse et figures.qmd` qui peut être facilement lu et exécuté sur RStudio.
 
-Ce code utilise le métadonnées des organisations `/data/Base de données anti trans.xlsx` et les données textuelles lemmatisées `/data/intermediate/base_lemmatized.csv`.
+Ce code utilise le métadonnées des organisations collectées dans `/data/Base de données anti trans.xlsx` et les données textuelles lemmatisées `/data/intermediate/base_lemmatized.csv`.
 
-Après avoir exécuté le premier bloc du .qmd (fonctionne comme un jupyter notebook), les différentes bibliothèques nécessaires devraient s'installer et certaines fonctions importées depuis /src/helpers. A ce moment, l'ensemble des blocs peut être exécuté avec un run all ou un render. Un render est conseillé et devrait donner un html ouvrable et facilement regardable dans un navigateur web.
+Après avoir exécuté le premier bloc du .qmd (fonctionne comme un jupyter notebook), les différentes bibliothèques nécessaires devraient s'installer et certaines fonctions importées depuis `/src/helpers`. A ce moment, l'ensemble des blocs peut être exécuté avec un run all ou un render. Un render est conseillé et devrait donner un html consultable dans un navigateur web.
 
-Il est impératif de mettre `save_figures = F` dans le premier bloc ou dans le cas contraire de créer le dossier /output/results pour avoir les figures dans un dossier.
+Il est impératif de mettre `save_figures = F` dans le premier bloc ou dans le cas contraire de créer le dossier `/output/results` pour avoir les figures dans ce dossier.
 
 ## Fabrication de la base lemmatisée
 
 Les métadonnées et sites scrappés sont présentés dans le `/data/Base de données anti trans.xlsx`.
 
-Le code `/src/scrapping_websites.ipynb` réalise les scrappings automatiques des sites avec beaucoup de documents à récupérer.
+Les données sont présentes dans le dossier `/data`. 
 
-Les données sont présentes dans le dossier /data. En son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (base manuel 2) et ceux récupérés par copié collé directement dans un fichier excel.
+En son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (stocké dans `/data/pdf`, mise en base sous le nom de `manuel2.tsv`, avec un jupyter notebook associé `src/Creation base manuelle 2.ipynb`) et ceux récupérés par copié collé directement dans un fichier excel.
+
+Les bases intermédiaires servant à d'autres étapes dans le processus sont mise dans `/data/intermediate`.
 
 Le code Merging permet de fusionner toutes les bases en `/data/intermediate/base_merged.csv`
 
-Le code Cleaning part de la base fusionnée, supprime les mots les moins fréquent et réalise la base lemmatisée (`/data/base_lemmatized.csv`).
+Le code Cleaning part de la base fusionnée, supprime les mots les moins fréquents et réalise la base lemmatisée (`/data/intermediate/base_lemmatized.csv`).
 
 Il est possible d'installer l'ensemble des libraires python nécessaires avec : 
 ```pip install -r requirements.txt```
