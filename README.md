@@ -24,7 +24,7 @@ Il est impératif de mettre `save_figures = F` dans le premier bloc ou dans le c
 
 Les métadonnées et sites scrappés sont présentés dans le `/data/Base de données anti trans.xlsx`.
 
-Le code `/src/Scrapping_websites.ipynb` réalise les scrappings automatiques des sites avec beaucoup de documents à récupérer.
+Le code `/src/scrapping_websites.ipynb` réalise les scrappings automatiques des sites avec beaucoup de documents à récupérer.
 
 Les données sont présentes dans le dossier /data. En son sein, le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (base manuel 2) et ceux récupérés par copié collé directement dans un fichier excel.
 
@@ -34,6 +34,14 @@ Le code Cleaning part de la base fusionnée, supprime les mots les moins fréque
 
 Il est possible d'installer l'ensemble des libraires python nécessaires avec : 
 ```pip install -r requirements.txt```
+
+## Exploration des noms de domaines
+
+`src/scrapping_websites.ipynb` permet de créer des réseaux interactifs de noms de domaines présents en lien sur des sites qui servent d'"origine" (seed). On a pu identifier quelques sites à partir de la Petite Sirène principalement avec cette méthode.
+
+`data/network/` contient les données du scrapping de la Petite Sirène car l'opération est longue. Le code précédent peut permettre de le revoir de façon reproductible.
+
+Malgré toutes ces remarques, cette partie du code sur les réseaux vu qu'elle était exploratoire est aussi la moins reproduite et reproductible. En particulier les données des différents réseaux trouvées ne pouvaient être mises sur le github pour une question de place.
 
 # Archive
 Les dossiers archives sont là pour un historique personnel des auteurs.
