@@ -6,7 +6,7 @@ Ce github nécessite [python (version 3.9 de préférence)](https://www.python.o
 Il est possible d'installer l'ensemble des libraires python nécessaires avec : 
 ```pip install -r requirements.txt```
 
-L'ensemble des librairies R devrait s'installer dans le premier bloc du code de `/src/analyse et figures.qmd`.
+Le code R gère en son sein l'installation des librairies requises.
 
 # Explications d'utilisation des codes.
 
@@ -24,16 +24,13 @@ Il est impératif de mettre `save_figures = F` dans le premier bloc ou dans le c
 
 Les métadonnées des sites scrappés sont présentés dans le `/data/Base de données anti trans.xlsx`.
 
-Le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (stockés dans `/data/pdf`, mis en base sous le nom de `manuel2.tsv` créé grâce à `src/Creation base manuelle 2.ipynb`) et ceux récupérés par copié collé directement dans un fichier excel nommé `manuel.xlsx`. Chaque site scrappé automatiquement est contenu dans un `.tsv` créé par le code `/src/scrapping_websites.ipynb`. Ce code étant long, il est déconseillé de le faire tourner si on veut voir les résultats.
+Le dossier `/data/text` contient notamment les différents tsv (csv tabulé) qui regroupent les différents textes collectés (manuellement ou pas). Deux bases manuelles sont présentes l'une correspondant aux pdf (stockés dans `/data/pdf`, mis en base sous le nom de `manuel2.tsv` créé grâce à `/src/Creation base manuelle 2.ipynb`) et ceux récupérés par copié collé directement dans un fichier excel nommé `manuel.xlsx`. Chaque site scrappé automatiquement est contenu dans un `.tsv` créé par le code `/src/scrapping_websites.ipynb`. Ce code étant long, il est déconseillé de le faire tourner si on veut voir les résultats.
 
 Les bases intermédiaires servant à d'autres étapes dans le processus sont mise dans `/data/intermediate`.
 
 Le code `/src/Merging.ipynb` permet de fusionner toutes les bases en `/data/intermediate/base_merged.csv`
 
 Le code `/src/cleaning.ipynb` part de la base fusionnée (merged), supprime les mots les moins fréquents (précisés dans `/data/intermediate/words_to_filter.txt`) et réalise la base lemmatisée (`/data/intermediate/base_lemmatized.csv`).
-
-Il est possible d'installer l'ensemble des libraires python nécessaires avec : 
-```pip install -r requirements.txt```
 
 ## Exploration des noms de domaines
 
