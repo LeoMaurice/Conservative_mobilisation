@@ -508,6 +508,23 @@ figure_top20_prob
 ```
 
 ### Topic by doc
+```{r}
+# On garde que les 500 premiers :mots gràace à cette fonction (facilite la lisibilité)
+extract_500_words <- function(text) {
+  words <- unlist(strsplit(text, "\\s+"))
+  if (length(words) > 500) {
+    return(paste(words[1:500], collapse = " "))
+  } else {
+    return(text)
+  }
+}
+
+filtered_data$contenu_500 <- sapply(filtered_data$contenu, extract_500_words)
+
+# Utiliser la fonction findThoughts avec les textes filtrés
+thoughts <- findThoughts(stm_model, texts = filtered_data$contenu_500, n = 3)
+thoughts
+```
 
 #### Distribution gamma
 
