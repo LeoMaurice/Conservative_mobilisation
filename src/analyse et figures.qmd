@@ -638,7 +638,7 @@ for (i in 1:num_topic) {
 
 ```{r}
 labels_variable = c(
-  "(Intercept)"="Constante",
+  "(Intercept)"="Féministe",
   "CTTRUE"="Catholique",
   "EDTRUE"="Education",
   "XDTRUE"="Extrême-droite",
@@ -652,6 +652,7 @@ labels_variable = c(
   "factor(Idéologie)CT"="Catholique",
   "factor(Idéologie)FE"="Féministe"
 )
+
 labels_significance = c(
   "***"= "Pr(>|t|)<0.001",
   "**"="Pr(>|t|)<0.01",
@@ -659,16 +660,39 @@ labels_significance = c(
   "•"="Pr(>|t|)<0.1",
   " "="NS Pr(>|t|)>0.1"
 )
-ggdotchart(total_coeffs|>
+
+topics_name = c(
+  "1" = "Enfance et éduc",
+  "2" = "Lesbiannisme",
+  "3" = "Essentialisme",
+  "4" = "Abolitionnisme",
+  "5" = "Liberté d'expression",
+  "6" = "Enfance et médic"
+)
+
+cst_vector <- total_coeffs %>%
+  filter(Variable == "(Intercept)") %>%
+  group_by(Topic) %>%
+  summarise(estimate_cst = sum(Estimate)) %>%
+  pull(estimate_cst)
+
+# Ajuster les valeurs d'Estimate en ajoutant les constantes pour chaque groupe de Topic
+total_coeffs_decalé <- total_coeffs %>%
+  group_by(Topic) %>%
+  mutate(Estimate = ifelse(Variable == "(Intercept)", Estimate, Estimate + cst_vector[Topic]),
+         err_min = ifelse(Variable == "(Intercept)", err_min, err_min + cst_vector[Topic]),
+         err_max = ifelse(Variable == "(Intercept)", err_max, err_max + cst_vector[Topic])) %>%
+  ungroup()
+
+ggdotchart(total_coeffs_decalé|>
              mutate(Variable= labels_variable[Variable],
-                    Topic = paste("Topic",Topic),
+                    Topic = factor(topics_name[Topic], levels = unname(topics_name)),
+                    
                     Significance = labels_significance[Significance],
                     Significance = factor(Significance,levels = unname(labels_significance))
-                    )|>
-             filter(Variable !="Constante"),
-           x="Variable",y="Estimate", color = "Significance")+
+                    ),x="Variable",y="Estimate", color = "Significance")+
   facet_wrap(facets = ~ Topic, ncol = 2)+
-  labs(title ="Effets de l'idéologie sur la prévalence des topics",
+  labs(title ="Prévalence des topics selon l'idéologie par l'association autrice",
         caption="Les barres d'erreur représentent l'intervalle de confiance à 95%.\nLecture : les associations orientées éducation parlent plus fréquement du topic 1 par rapport aux associations féministes.")+
   geom_errorbar(aes(ymin = err_min,ymax=err_max, color= Significance),width=0.075)+
   theme_ready()+
@@ -676,5 +700,5 @@ ggdotchart(total_coeffs|>
   scale_color_prism("winter_bright")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 if(save_figure)
-  ggsave("../output/results/coefficient.png", height = plot_height, width = plot_width)
+  ggsave("../output/results/coefficient.png", height = 2*plot_height, width = plot_width)
 ```
