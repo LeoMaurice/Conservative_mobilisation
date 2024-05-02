@@ -1,5 +1,9 @@
 # Projet Mobilisation Anti Trans
 
+# Résumé du projet 
+
+Ce projet vise à analyse les discours des organisations se mobilisant contre les droits des personnes trans'. 
+
 # Requirements
 Ce github nécessite [python (version 3.9 de préférence)](https://www.python.org/downloads/release/python-390/), jupyter, [R](https://www.r-project.org/), [RStudio](https://posit.co/products/open-source/rstudio/) et [Quarto](https://quarto.org/).
 
